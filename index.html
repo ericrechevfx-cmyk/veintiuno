@@ -76,12 +76,6 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px;letter-spacing:
 .seg button[aria-pressed=true]{background:var(--paper);color:var(--ink)}
 .list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .list li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
-.teams{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.team{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:4px;min-height:100px}
-.team.mine{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
-.team .suit{font-size:26px;line-height:1}
-.team b{font-weight:700}
-.team .mem{font-size:13px;color:var(--muted)}
 .summary{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:4px}
 .summary b{font-weight:700}
 
@@ -104,6 +98,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:12px;letter-spacing:
 .qcard.tall{min-height:160px}
 .qcard .cat{font:700 11px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--red);display:flex;justify-content:space-between;gap:10px}
 .qcard .cat span:last-child{color:#8b8170}
+.qcard .dots{font-style:normal;letter-spacing:.1em;color:#b9ad92;margin-left:4px}
 .qcard .q{font:500 clamp(21px,5.7vw,26px)/1.27 var(--serif);margin:0;text-wrap:pretty}
 .qcard::after{content:"21";position:absolute;right:12px;bottom:-12px;font:400 64px/1 var(--display);color:#00000010;pointer-events:none}
 .qcard.ghost{background:transparent;color:var(--fg);border:1px dashed var(--line);box-shadow:none;min-height:0}
@@ -227,20 +222,25 @@ function peerOpts(){
   return {host, port:+port||9000, path:"/", secure:false, debug:0};
 }
 function newCode(){ const A="ABCDEFGHJKLMNPQRSTUVWXYZ"; let c=""; for(let i=0;i<4;i++) c+=A[Math.floor(Math.random()*A.length)]; return c; }
-function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 let wakeLock=null;
 async function keepAwake(){ try{ if(!wakeLock && navigator.wakeLock){ wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release",()=>wakeLock=null);} }catch{} }
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && net.role) keepAwake(); });
 const buzz = p => { try{ navigator.vibrate && navigator.vibrate(p); }catch{} };
 
 /* ============ reglas ============ */
-const TEAMS = [{n:"Corazones",s:"♥",red:1},{n:"Picas",s:"♠"},{n:"Diamantes",s:"♦",red:1},{n:"Tréboles",s:"♣"}];
 const MODES = {
   juntos:{n:"Todos juntos", d:"Todos recibís las mismas preguntas a la vez. Cada uno decide en secreto cuándo plantarse."},
-  solo:{n:"Cada uno", d:"Cada jugador recibe sus propias preguntas y va a su ritmo."},
-  equipos:{n:"Equipos", d:"Cada equipo comparte las preguntas y decide junto. Cualquiera del equipo puede responder."}
+  solo:{n:"Cada uno", d:"Cada uno, con su móvil, recibe sus propias preguntas y va a su ritmo."},
+  equipos:{n:"Equipos", d:"Igual que «Cada uno», pero cada móvil es un equipo. Poned de nombre el del equipo, por ejemplo «Pepe y Juan»."}
 };
-const ROUNDS = [3,5,7,10];
+const NAME_MAX = 24;
+// Dificultad de la sala: peso de las preguntas fáciles, medias y difíciles (índices 1, 2 y 3).
+const LEVELS = {
+  facil:{n:"Fácil", w:[0,.6,.4,0], d:"Sobre todo preguntas que sabe casi todo el mundo. Para calentar o jugar con peques."},
+  variada:{n:"Variada", w:[0,.15,.45,.4], d:"Alguna fácil y muchas de las que te hacen dudar entre dos o tres números."},
+  dificil:{n:"Difícil", w:[0,0,.3,.7], d:"Casi todas son datos que no sabes y tienes que deducir."}
+};
+const dots = d => "●".repeat(d)+"○".repeat(3-d);
 const MAXQ = 10;                    // máximo de preguntas por mano y ronda
 const BJ = 30, EXACT = 2;           // 21 exacto vale 30; cada respuesta clavada, +2
 const points = (total, exact) => (total>21 ? 0 : total===21 ? BJ : total) + EXACT*exact;
@@ -249,13 +249,19 @@ const sum = a => a.reduce((s,x)=>s+x, 0);
 // Identificador estable de cada pregunta (por su texto) para no repetirlas entre partidas.
 const QID = PREGUNTAS.map(q=>{ let h=5381; for(let i=0;i<q[1].length;i++) h=((h*33)^q[1].charCodeAt(i))>>>0; return h.toString(36); });
 // Reparte una pregunta que no haya salido en esta partida y, mientras queden, que este móvil no haya repartido antes.
+// Primero se sortea la dificultad según el nivel de la sala y luego una pregunta de esa dificultad.
 function drawQuestion(S){
-  const dealt = new Set(S.dealt), all = PREGUNTAS.map((_,i)=>i);
+  const dealt = new Set(S.dealt), all = PREGUNTAS.map((_,i)=>i), w = (LEVELS[S.level]||LEVELS.variada).w;
   let seen = new Set(prefs.get("seen")||[]);
-  let pool = all.filter(i=>!dealt.has(i) && !seen.has(QID[i]));
-  if(!pool.length){ seen = new Set(); pool = all.filter(i=>!dealt.has(i)); }
+  const avail = useSeen => all.filter(i=>!dealt.has(i) && w[PREGUNTAS[i][4]]>0 && !(useSeen && seen.has(QID[i])));
+  let pool = avail(true);
+  if(!pool.length){ seen = new Set(); pool = avail(false); }   // ya salieron todas las de este nivel: se vuelve a empezar
+  if(!pool.length) pool = all.filter(i=>!dealt.has(i));
   if(!pool.length) pool = all;
-  const i = pool[Math.floor(Math.random()*pool.length)];
+  const by = [1,2,3].map(d=>pool.filter(i=>PREGUNTAS[i][4]===d));
+  let r = Math.random()*[1,2,3].reduce((t,d)=>t+(by[d-1].length?w[d]:0), 0), pick = pool;
+  for(const d of [1,2,3]){ if(!by[d-1].length || !w[d]) continue; r -= w[d]; if(r<0){ pick = by[d-1]; break; } }
+  const i = pick[Math.floor(Math.random()*pick.length)];
   seen.add(QID[i]); prefs.set("seen",[...seen]); S.dealt.push(i);
   return i;
 }
@@ -264,26 +270,19 @@ function drawQuestion(S){
 const Game = {
   S:null,
   create(code, hostName){
-    this.S = {code, phase:"lobby", mode:"juntos", rounds:5, teamsN:2, round:0,
-      players:[{id:myPid, name:hostName, connected:true, team:0}],
+    this.S = {code, phase:"lobby", mode:"juntos", level:"variada", round:0,
+      players:[{id:myPid, name:hostName, connected:true}],
       hands:[], shared:[], dealt:[], steps:[], step:0, last:null, scores:{}, ev:{seq:0}};
   },
   p(id){ return this.S.players.find(p=>p.id===id); },
-  hand(pid){ return this.S.hands.find(h=>h.members.includes(pid)); },
+  hand(pid){ return this.S.hands.find(h=>h.id===pid); },
   event(o){ this.S.ev = {...o, seq:this.S.ev.seq+1}; },
-  smallestTeam(){
-    const c=Array(this.S.teamsN).fill(0);
-    this.S.players.forEach(p=>{ if(p.team<c.length) c[p.team]++; });
-    return c.indexOf(Math.min(...c));
-  },
   newGame(){ const S=this.S; S.round=0; S.scores={}; S.dealt=[]; this.startRound(); },
   startRound(){
     const S=this.S;
     S.round++; S.phase="play"; S.shared=[]; S.steps=[]; S.step=0; S.last=null;
-    S.hands = S.mode==="equipos"
-      ? TEAMS.slice(0,S.teamsN).map((t,i)=>({id:"t"+i, name:t.n, team:i, members:S.players.filter(p=>p.team===i).map(p=>p.id)})).filter(h=>h.members.length)
-      : S.players.map(p=>({id:p.id, name:p.name, members:[p.id]}));
-    S.hands.forEach(h=>{ h.qs=[]; h.gs=[]; h.stood=false; h.draft=null; });
+    // Una mano por móvil. En el modo Equipos, cada móvil es un equipo.
+    S.hands = S.players.map(p=>({id:p.id, name:p.name, qs:[], gs:[], stood:false}));
     if(S.mode==="juntos"){ const q=drawQuestion(S); S.shared.push(q); S.hands.forEach(h=>h.qs.push(q)); }
     else S.hands.forEach(h=>h.qs.push(drawQuestion(S)));
     this.event({kind:"round"});
@@ -312,7 +311,7 @@ const Game = {
     S.last = S.hands.map(h=>{
       const total=sumA(h.qs), exact=h.qs.filter((q,j)=>h.gs[j]===PREGUNTAS[q][2]).length, pts=points(total,exact);
       S.scores[h.id]=(S.scores[h.id]||0)+pts;
-      return {id:h.id, name:h.name, team:h.team, n:h.qs.length, total, exact, pts};
+      return {id:h.id, name:h.name, n:h.qs.length, total, exact, pts};
     }).sort((a,b)=>b.pts-a.pts);
     S.phase="results"; this.event({kind:"results"});
   },
@@ -324,29 +323,20 @@ const Game = {
       case "cfg":
         if(!host || S.phase!=="lobby") return;
         if(MODES[m.mode]) S.mode=m.mode;
-        if(ROUNDS.includes(m.rounds)) S.rounds=m.rounds;
-        if([2,3,4].includes(m.teamsN) && m.teamsN!==S.teamsN){
-          S.teamsN=m.teamsN; S.players.forEach(x=>{ if(x.team>=S.teamsN) x.team=this.smallestTeam(); });
-        }
+        if(LEVELS[m.level]) S.level=m.level;
         break;
-      case "team":
-        if(!p || S.phase!=="lobby" || !(Number.isInteger(m.team) && m.team>=0 && m.team<S.teamsN)) return;
-        p.team=m.team; break;
-      case "shuffle":
-        if(!host || S.phase!=="lobby") return;
-        shuffle(S.players.slice()).forEach((x,i)=>x.team=i%S.teamsN); break;
+      case "rename": {
+        const name=String(m.name||"").slice(0,NAME_MAX).trim();
+        if(!p || !name) return;
+        p.name=name; const h=this.hand(pid); if(h) h.name=name; break;
+      }
       case "start":
         if(!host || S.phase!=="lobby") return;
         this.newGame(); break;
-      case "draft": {
-        const h=this.hand(pid);
-        if(!h || S.phase!=="play" || h.stood || S.mode!=="equipos") return;
-        h.draft = okGuess(m.g) ? m.g : null; break;
-      }
       case "answer": {
         const h=this.hand(pid);
         if(!h || S.phase!=="play" || h.stood || m.n!==h.qs.length || h.gs.length!==h.qs.length-1 || !okGuess(m.g)) return;
-        h.gs.push(m.g); h.draft=null;
+        h.gs.push(m.g);
         if(m.stand || h.qs.length>=MAXQ) h.stood=true;
         else if(S.mode!=="juntos") h.qs.push(drawQuestion(S));
         this.afterMove(); break;
@@ -355,7 +345,7 @@ const Game = {
         const h=S.hands.find(x=>x.id===m.id);
         if(!host || S.phase!=="play" || !h || h.stood) return;
         if(h.gs.length<h.qs.length) h.qs.pop();   // la pregunta que no ha respondido no cuenta
-        h.stood=true; h.draft=null; this.afterMove(); break;
+        h.stood=true; this.afterMove(); break;
       }
       case "next":
         if(!host || S.phase!=="reveal") return;
@@ -364,10 +354,9 @@ const Game = {
       case "skip":
         if(!host || S.phase!=="reveal") return;
         this.finishRound(); break;
-      case "round":
+      case "round":   // se juegan las rondas que se quiera, hasta que el líder termina
         if(!host || S.phase!=="results") return;
-        if(S.round<S.rounds) this.startRound(); else { S.phase="final"; this.event({kind:"final"}); }
-        break;
+        this.startRound(); break;
       case "end":
         if(!host || S.phase!=="results") return;
         S.phase="final"; this.event({kind:"final"}); break;
@@ -387,7 +376,7 @@ const Game = {
     net.broadcast();
   },
   revealView(){
-    const S=this.S, st=S.steps[S.step], A=i=>PREGUNTAS[i][2], Q=i=>{ const q=PREGUNTAS[i]; return {c:q[0], t:q[1], a:q[2], x:q[3]}; };
+    const S=this.S, st=S.steps[S.step], A=i=>PREGUNTAS[i][2], Q=i=>{ const q=PREGUNTAS[i]; return {c:q[0], t:q[1], a:q[2], x:q[3], d:q[4]}; };
     if(S.mode==="juntos"){
       const k=st.k;
       return {i:S.step, of:S.steps.length, q:Q(S.shared[k]), seq:S.shared.slice(0,k+1).map(A),
@@ -401,13 +390,13 @@ const Game = {
         run: i<st.h || !h.qs.length ? sumA(h.qs) : i===st.h ? sumA(h.qs.slice(0,st.j+1)) : null}))};
   },
   view(forId){
-    const S=this.S, h=this.hand(forId), Q=i=>({c:PREGUNTAS[i][0], t:PREGUNTAS[i][1]});
-    const v = {code:S.code, phase:S.phase, mode:S.mode, rounds:S.rounds, round:S.round, teamsN:S.teamsN, host:myPid, ev:S.ev,
+    const S=this.S, h=this.hand(forId), Q=i=>({c:PREGUNTAS[i][0], t:PREGUNTAS[i][1], d:PREGUNTAS[i][4]});
+    const v = {code:S.code, phase:S.phase, mode:S.mode, level:S.level||"variada", round:S.round, host:myPid, ev:S.ev,
       scores:S.scores, last:S.last,
-      players:S.players.map(p=>({id:p.id, name:p.name, connected:p.connected, team:p.team})),
-      hands:S.hands.map(x=>({id:x.id, name:x.name, team:x.team, members:x.members, n:x.qs.length, a:x.gs.length, stood:x.stood}))};
+      players:S.players.map(p=>({id:p.id, name:p.name, connected:p.connected})),
+      hands:S.hands.map(x=>({id:x.id, name:x.name, n:x.qs.length, a:x.gs.length, stood:x.stood}))};
     // Solo se manda el texto de tus preguntas: las respuestas no salen del móvil del líder hasta desvelarlas.
-    if(h && S.phase==="play") v.me = {id:h.id, qs:h.qs.map(Q), gs:h.gs.slice(), stood:h.stood, draft:h.draft};
+    if(h && S.phase==="play") v.me = {id:h.id, qs:h.qs.map(Q), gs:h.gs.slice(), stood:h.stood};
     if(S.phase==="play" && S.mode==="juntos" && S.shared.length) v.cur = {n:S.shared.length, ...Q(S.shared[S.shared.length-1])};
     if(S.phase==="reveal") v.rev = this.revealView();
     if((S.phase==="results"||S.phase==="final") && h) v.review = h.qs.map((i,j)=>({t:PREGUNTAS[i][1], a:PREGUNTAS[i][2], g:h.gs[j]}));
@@ -438,12 +427,12 @@ const net = {
       conn.on("data", m=>{
         if(!m || typeof m!=="object") return;
         if(m.t==="join"){
-          const S=Game.S, name=String(m.name||"").slice(0,16).trim()||"Jugador";
+          const S=Game.S, name=String(m.name||"").slice(0,NAME_MAX).trim()||"Jugador";
           let p = Game.p(m.pid);
           if(!p){
             if(S.players.length>=16){ conn.send({t:"reject", why:"La sala está llena (máx. 16)."}); return; }
             // Se puede entrar con la partida empezada: juega desde la siguiente ronda.
-            p = {id:m.pid, name, connected:true, team:Game.smallestTeam()}; S.players.push(p);
+            p = {id:m.pid, name, connected:true}; S.players.push(p);
           }
           const old = this.conns.get(m.pid); if(old && old!==conn){ try{old.close();}catch{} }
           p.connected=true; p.name=name; conn.pid=m.pid; this.conns.set(m.pid, conn);
@@ -509,18 +498,19 @@ const net = {
 };
 
 /* ============ interfaz ============ */
-let view=null, homeError="", draft={key:null, g:null, fresh:false}, lastCardKey="", lastRevKey="", sentKey="";
+let view=null, homeError="", draft={key:null, g:null}, lastCardKey="", lastRevKey="", sentKey="";
 const app = $("#app");
 const isHost = () => view && view.host===myPid;
 const nameOf = id => { const p = view && view.players.find(x=>x.id===id); return p ? p.name : "Alguien"; };
 const leaderName = () => nameOf(view.host);
-// Nombre de una mano: el jugador o el equipo (con su palo).
-function handInfo(id){
+// Nombre de una mano (un jugador o, en el modo Equipos, un equipo), aunque ya se haya ido.
+function handName(id){
+  if(view.players.some(p=>p.id===id)) return nameOf(id);
   const h = (view.hands||[]).find(x=>x.id===id) || (view.last||[]).find(x=>x.id===id);
-  if(id[0]==="t" && /^t\d$/.test(id)){ const t=TEAMS[+id[1]]; return {name:t.n, suit:t, mine:(view.players.find(p=>p.id===myPid)||{}).team===+id[1]}; }
-  return {name: view.players.some(p=>p.id===id) ? nameOf(id) : (h ? h.name : "Alguien"), mine:id===myPid};
+  return h ? h.name : "Alguien";
 }
-const handLabel = id => { const h=handInfo(id); return (h.suit?`<span class="${h.suit.red?"red":""}">${h.suit.s}</span> `:"")+esc(h.name); };
+const handLabel = id => esc(handName(id));
+const teams = () => view.mode==="equipos";
 const plural = (n, a, b) => n===1 ? a : b;
 
 function leave(){ net.stop(); store.del("session"); store.del("hostState"); view=null; renderHome(); }
@@ -540,8 +530,9 @@ const RULES = `
     <li>Pide <b>otra pregunta</b> o <b>plántate</b> cuando creas que estás cerca de 21. Si te pasas, la ronda no te suma.</li>
     <li>Cuando todos se han plantado, el líder desvela las respuestas una a una. Cuenta la suma real, no la que creías.</li>
   </ol>
-  <p><b>Puntos por ronda:</b> tu suma si no pasas de 21 · 21 exacto: <b>${BJ}</b> · si te pasas: 0 · y <b>+${EXACT}</b> por cada respuesta que clavas.</p>
-  <p><b>Modos:</b> Todos juntos (las mismas preguntas a la vez), Cada uno (preguntas propias, a tu ritmo) y Equipos.</p>`;
+  <p><b>Puntos por ronda:</b> tu suma si no pasas de 21 · 21 exacto: <b>${BJ}</b> · si te pasas: 0 · y <b>+${EXACT}</b> por cada respuesta que clavas. Se juegan las rondas que queráis y se van sumando; el líder decide cuándo terminar.</p>
+  <p><b>Dificultad:</b> el líder elige Fácil, Variada o Difícil. Los puntitos de cada carta dicen cómo de difícil es esa pregunta.</p>
+  <p><b>Modos:</b> Todos juntos (las mismas preguntas a la vez), Cada uno (preguntas propias, a tu ritmo) y Equipos (como Cada uno, pero cada móvil es un equipo con su nombre, por ejemplo «Pepe y Juan»).</p>`;
 
 function renderHome(){
   closeSheets();
@@ -558,8 +549,8 @@ function renderHome(){
       <p class="lede">Preguntas con respuesta del 0 al 10. Suma sin pasarte de 21.</p>
     </div>
     <div class="stack">
-      <label class="label" for="nm">Tu nombre</label>
-      <input id="nm" maxlength="16" autocomplete="nickname" placeholder="Eric" value="${esc(saved)}">
+      <label class="label" for="nm">Tu nombre o el de tu equipo</label>
+      <input id="nm" maxlength="${NAME_MAX}" autocomplete="nickname" placeholder="Ana, o Pepe y Juan" value="${esc(saved)}">
     </div>
     <div class="stack">
       <label class="label" for="cd">Código de sala</label>
@@ -590,14 +581,13 @@ function renderWaiting(code){
 
 function onState(v){
   const prev = view; view = v;
-  if(draft.fresh && v.mode==="equipos") draft.fresh=false;   // en equipos manda lo que diga el líder
   if(location.hash.slice(1)!==v.code) history.replaceState(null,"","#"+v.code);
   render(prev);
 }
 
 function render(prev){
   if(!view) return renderHome();
-  if(view.phase!=="play") closeSheets();
+  if(prev && prev.phase!==view.phase) closeSheets();
   if(view.phase==="lobby") return renderLobby();
   if(view.phase==="play") return renderPlay(prev);
   if(view.phase==="reveal") return renderReveal();
@@ -641,30 +631,7 @@ async function showQR(link){
 
 /* ---------- sala ---------- */
 function renderLobby(){
-  const v=view, host=isHost(), link=location.origin+location.pathname+"#"+v.code, teams=v.mode==="equipos";
-  const me=v.players.find(p=>p.id===myPid)||{};
-  const config = host ? `
-    <div class="stack"><span class="label">Modo de juego</span>
-      <div class="seg">${Object.entries(MODES).map(([k,m])=>`<button data-mode="${k}" aria-pressed="${v.mode===k}">${m.n}</button>`).join("")}</div>
-      <p class="lede">${MODES[v.mode].d}</p></div>
-    <div class="stack"><span class="label">Rondas</span>
-      <div class="seg">${ROUNDS.map(n=>`<button data-rounds="${n}" aria-pressed="${v.rounds===n}">${n}</button>`).join("")}</div></div>
-    ${teams?`<div class="stack"><span class="label">Equipos</span>
-      <div class="seg">${[2,3,4].map(n=>`<button data-teams="${n}" aria-pressed="${v.teamsN===n}">${n}</button>`).join("")}</div></div>`:""}`
-  : `<div class="summary"><span class="label">Modo</span><b>${MODES[v.mode].n} · ${v.rounds} rondas</b><span class="lede">${MODES[v.mode].d}</span></div>`;
-  const people = teams ? `
-    <div class="stack">
-      <div class="row" style="justify-content:space-between"><span class="label">Toca un equipo para unirte</span>${host?`<button class="btn ghost" id="mix">Mezclar</button>`:""}</div>
-      <div class="teams">${TEAMS.slice(0,v.teamsN).map((t,i)=>{
-        const mem=v.players.filter(p=>p.team===i);
-        return `<button class="team ${me.team===i?"mine":""}" data-team="${i}"><span class="suit ${t.red?"red":""}">${t.s}</span><b>${t.n}</b>
-          <span class="mem">${mem.length?mem.map(p=>`<span class="${p.connected?"":"off"}">${esc(p.name)}</span>`).join(", "):"Nadie todavía"}</span></button>`;}).join("")}</div>
-    </div>`
-  : `<div class="stack"><span class="label">Jugadores · ${v.players.length}</span>
-      <ul class="list">${v.players.map(p=>`
-        <li class="${p.connected?"":"off"}"><span>${esc(p.name)} ${p.id===myPid?'<span class="tag">· tú</span>':""} ${p.id===v.host?'<span class="tag">· líder</span>':""}</span>
-        ${host && p.id!==myPid ? `<button class="btn ghost" data-kick="${esc(p.id)}">Quitar</button>` : (p.connected?"":'<span class="tag">desconectado</span>')}</li>`).join("")}
-      </ul></div>`;
+  const v=view, host=isHost(), link=location.origin+location.pathname+"#"+v.code, eq=teams();
   app.innerHTML = `
   <main class="wrap">
     <div class="row" style="justify-content:space-between"><span class="label">Sala</span><button class="btn ghost" id="exit">Salir</button></div>
@@ -672,40 +639,64 @@ function renderLobby(){
       <div class="code">${esc(v.code)}</div>
       <div class="row"><button class="btn line" id="share">Invitar</button><button class="btn line" id="qr">Código QR</button></div>
     </div>
-    ${config}
-    ${people}
-    <div class="dock">${host ? `<button class="btn" id="go">${v.players.length<2?"Empezar (tú solo)":"Empezar"}</button>`
+    ${host ? `<div class="stack"><span class="label">Modo de juego</span>
+      <div class="seg">${Object.entries(MODES).map(([k,m])=>`<button data-mode="${k}" aria-pressed="${v.mode===k}">${m.n}</button>`).join("")}</div>
+      <p class="lede">${MODES[v.mode].d}</p></div>
+    <div class="stack"><span class="label">Dificultad</span>
+      <div class="seg">${Object.entries(LEVELS).map(([k,l])=>`<button data-level="${k}" aria-pressed="${v.level===k}">${l.n}</button>`).join("")}</div>
+      <p class="lede">${LEVELS[v.level].d}</p></div>`
+    : `<div class="summary"><span class="label">Modo</span><b>${MODES[v.mode].n} · dificultad ${LEVELS[v.level].n.toLowerCase()}</b><span class="lede">${MODES[v.mode].d}</span></div>`}
+    <div class="stack"><span class="label">${eq?"Equipos":"Jugadores"} · ${v.players.length}</span>
+      <ul class="list">${v.players.map(p=>`
+        <li class="${p.connected?"":"off"}"><span>${esc(p.name)} ${p.id===myPid?'<span class="tag">· tú</span>':""} ${p.id===v.host?'<span class="tag">· líder</span>':""}</span>
+        ${p.id===myPid ? `<button class="btn ghost" id="rename">Cambiar nombre</button>`
+          : host ? `<button class="btn ghost" data-kick="${esc(p.id)}">Quitar</button>` : (p.connected?"":'<span class="tag">desconectado</span>')}</li>`).join("")}
+      </ul></div>
+    <div class="dock">${host ? `<button class="btn" id="go">${v.players.length>1?"Empezar":eq?"Empezar (un solo equipo)":"Empezar (tú solo)"}</button>`
            : `<p class="lede">Esperando a que ${esc(leaderName())} empiece la partida.</p>`}</div>
   </main>`;
   $("#exit").onclick = leave;
   $("#qr").onclick = ()=>showQR(link);
+  $("#rename").onclick = renameSheet;
   $("#share").onclick = async e=>{
     if(navigator.share){ try{ await navigator.share({title:"Veintiuno", text:"Entra en mi sala de Veintiuno: "+v.code, url:link}); return; }catch(err){ if(err && err.name==="AbortError") return; } }
     try{ await navigator.clipboard.writeText(link); e.target.textContent="Enlace copiado"; }catch{ e.target.textContent=link; }
   };
-  app.querySelectorAll("[data-team]").forEach(b=>b.onclick=()=>net.send({t:"team", team:+b.dataset.team}));
   if(host){
-    const cfg = o => net.send({t:"cfg", mode:v.mode, rounds:v.rounds, teamsN:v.teamsN, ...o});
-    app.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>cfg({mode:b.dataset.mode}));
-    app.querySelectorAll("[data-rounds]").forEach(b=>b.onclick=()=>cfg({rounds:+b.dataset.rounds}));
-    app.querySelectorAll("[data-teams]").forEach(b=>b.onclick=()=>cfg({teamsN:+b.dataset.teams}));
+    app.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>net.send({t:"cfg", mode:b.dataset.mode}));
+    app.querySelectorAll("[data-level]").forEach(b=>b.onclick=()=>net.send({t:"cfg", level:b.dataset.level}));
     app.querySelectorAll("[data-kick]").forEach(b=>b.onclick=()=>net.send({t:"kick", id:b.dataset.kick}));
-    const mix=$("#mix"); if(mix) mix.onclick=()=>net.send({t:"shuffle"});
     $("#go").onclick=()=>{ keepAwake(); net.send({t:"start"}); };
   }
+}
+function renameSheet(){
+  const me=view.players.find(p=>p.id===myPid), eq=teams();
+  const ov=sheet(`<p class="q">${eq?"Nombre del equipo":"Tu nombre"}</p>
+    <input id="rn" maxlength="${NAME_MAX}" autocomplete="off" placeholder="${eq?"Pepe y Juan":"Tu nombre"}" value="${esc(me?me.name:"")}">
+    <div class="row"><button class="btn line" data-no>Cancelar</button><button class="btn" data-yes>Guardar</button></div>`);
+  const inp=ov.querySelector("#rn"); inp.focus(); inp.select();
+  const save=()=>{ const n=inp.value.trim().slice(0,NAME_MAX); if(!n){ inp.focus(); return; } ov.remove(); setMyName(n); };
+  ov.querySelector("[data-no]").onclick=()=>ov.remove();
+  ov.querySelector("[data-yes]").onclick=save;
+  inp.onkeydown=e=>{ if(e.key==="Enter") save(); };
+}
+// El nombre nuevo también se guarda en la sesión, para que al reconectar no vuelva el antiguo.
+function setMyName(n){
+  net.name=n; const s=store.get("session"); if(s){ s.name=n; store.set("session",s); }
+  net.send({t:"rename", name:n});
 }
 
 /* ---------- jugar ---------- */
 function hud(){
-  return `<div class="hud"><div class="r">Ronda ${view.round}<small>de ${view.rounds}</small></div><button class="btn ghost" id="menu">Salir</button></div>`;
+  return `<div class="hud"><div class="r">Ronda ${view.round}</div><button class="btn ghost" id="menu">Salir</button></div>`;
 }
 // Estado de cada mano: pensando, listo (modo juntos, esperando a los demás) o plantado.
 function whoHtml(){
   const v=view, host=isHost();
   return `<div class="who">${v.hands.map(h=>{
     const st = h.stood ? "plantado" : (v.mode==="juntos" && h.a===h.n) ? "listo" : "pensando";
-    const off = h.members.every(id=>!(v.players.find(p=>p.id===id)||{}).connected);
-    const mine = h.members.includes(myPid);
+    const off = !(v.players.find(p=>p.id===h.id)||{}).connected;
+    const mine = h.id===myPid;
     const inner = `<i></i>${handLabel(h.id)}${v.mode!=="juntos"?` · ${h.n}`:""}`;
     return host && !h.stood && !mine
       ? `<button class="chip ${st} ${off?"off":""}" data-force="${esc(h.id)}" title="Plantar">${inner}</button>`
@@ -719,7 +710,7 @@ function chips(gs, extra){
 function meter(gs, g){
   const tot = sum(gs)+(g??0), cls = tot>21 ? "over" : tot===21 ? "bj" : "";
   return `<div class="meter">
-    <div class="top"><span class="label">${g==null?"Llevas, según tú":"Con esta llevarías"}</span><span class="sum ${cls}">≈ ${tot}</span></div>
+    <div class="top"><span class="label">${g==null?(teams()?"Lleváis, según vosotros":"Llevas, según tú"):(teams()?"Con esta llevaríais":"Con esta llevarías")}</span><span class="sum ${cls}">≈ ${tot}</span></div>
     <div class="bar ${cls}"><i style="width:${Math.min(100, tot/21*100)}%"></i></div>
     <div class="gs">${chips(gs, g)}</div>
   </div>`;
@@ -736,21 +727,21 @@ function renderPlay(){
     const n=me.qs.length, pending = !me.stood && me.gs.length<n;
     if(pending){
       const q=me.qs[n-1], key=v.round+":"+me.id+":"+n;
-      const g = v.mode==="equipos" ? (draft.key===key && draft.fresh ? draft.g : me.draft) : (draft.key===key ? draft.g : null);
+      const g = draft.key===key ? draft.g : null;
       const isNew = key!==lastCardKey; lastCardKey=key;
       const sent = sentKey===key;
       body = `
         <section class="qcard tall ${isNew?"deal":""}">
-          <div class="cat"><span>${esc(q.c)}</span><span>Pregunta ${n}${v.mode==="equipos"?" · "+esc(handInfo(me.id).name):""}</span></div>
+          <div class="cat"><span>${esc(q.c)} <i class="dots" title="Dificultad">${dots(q.d)}</i></span><span>Pregunta ${n}</span></div>
           <p class="q">${esc(q.t)}</p>
         </section>
         <div class="stack" style="gap:8px">
-          <span class="label">¿Cuánto crees que es?${v.mode==="equipos"?" Lo ve todo tu equipo":""}</span>
+          <span class="label">¿Cuánto ${teams()?"creéis":"crees"} que es?</span>
           <div class="pick">${Array.from({length:11},(_,i)=>`<button data-g="${i}" aria-pressed="${g===i}">${i}</button>`).join("")}</div>
         </div>
         ${meter(me.gs, g)}
         <div class="dock row">
-          <button class="btn alt" id="stand" ${g==null||sent?"disabled":""}>Me planto</button>
+          <button class="btn alt" id="stand" ${g==null||sent?"disabled":""}>${teams()?"Nos plantamos":"Me planto"}</button>
           ${n<MAXQ?`<button class="btn" id="more" ${g==null||sent?"disabled":""}>Otra pregunta</button>`:""}
         </div>`;
       bind = ()=>bindQuestion(key, n, g);
@@ -759,7 +750,7 @@ function renderPlay(){
       const cur = v.mode==="juntos" && v.cur && v.cur.n>n ? v.cur : null;
       body = `
         <div class="panel">
-          <span class="label">${v.mode==="equipos"?"Tu equipo se ha plantado":"Te has plantado"}</span>
+          <span class="label">${teams()?"Os habéis plantado":"Te has plantado"}</span>
           <div class="bigsum">≈ ${sum(me.gs)}</div>
           <div class="gs">${chips(me.gs)}</div>
           <p class="lede">${others.length?`Esperando a ${others.join(", ")}.`:"Vamos a desvelar…"}</p>
@@ -782,22 +773,21 @@ function renderPlay(){
   $("#menu").onclick=openMenu;
   if(bind) bind();
   app.querySelectorAll("[data-force]").forEach(b=>b.onclick=()=>{
-    const name=handInfo(b.dataset.force).name;
+    const name=handName(b.dataset.force);
     confirmSheet(`¿Plantar a ${esc(name)}?`, "Úsalo si se ha ido o se ha quedado sin conexión. Se queda con lo que lleva; la pregunta que tenga sin responder no cuenta.", "Plantar", ()=>net.send({t:"force", id:b.dataset.force}));
   });
 }
 function bindQuestion(key, n, g){
   const v=view;
   app.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{
-    draft={key, g:+b.dataset.g, fresh:true}; buzz(8);
-    if(v.mode==="equipos") net.send({t:"draft", g:+b.dataset.g});
+    draft={key, g:+b.dataset.g}; buzz(8);
     renderPlay();
   });
   const send = stand => { sentKey=key; net.send({t:"answer", n, g, stand}); if(view && view.phase==="play") renderPlay(); };
   const more=$("#more"); if(more) more.onclick=()=>send(false);
   const stand=$("#stand"); if(stand) stand.onclick=()=>{
     const tot=sum(v.me.gs)+g;
-    confirmSheet(`¿Te plantas con ${tot}?`, "Es lo que crees que llevas. Al final cuenta la suma de verdad.", "Me planto", ()=>send(true), key);
+    confirmSheet(teams()?`¿Os plantáis con ${tot}?`:`¿Te plantas con ${tot}?`, `Es lo que ${teams()?"creéis":"crees"} que lleváis. Al final cuenta la suma de verdad.`, teams()?"Nos plantamos":"Me planto", ()=>send(true), key);
   };
 }
 
@@ -811,19 +801,19 @@ function renderReveal(){
     head = `<span class="label">Pregunta ${r.i+1} de ${r.of}</span>`;
     rows = v.hands.map(h=>{
       const x=r.rows.find(y=>y.id===h.id), cls = x.run>21?"bust":x.run===21?"bj":"";
-      const mine=h.members.includes(myPid);
+      const mine=h.id===myPid;
       return `<li class="${x.had?"":"out"} ${cls} ${mine?"me":""}"><span class="rk"></span>
         <span class="nm">${handLabel(h.id)}</span>
         <span class="g ${x.had&&x.g===a?"ok":""}">${x.had ? (x.g===a?`dijo ${x.g} ✓`:`dijo ${x.g}`) : "plantado"}</span>
         <span class="tot ${x.had&&isNew?"bump":""}">${x.run}</span></li>`;
     }).join("");
   } else {
-    const hi=handInfo(r.hand), ok=r.g===a;
+    const ok=r.g===a;
     head = `<span class="label">${handLabel(r.hand)} · pregunta ${r.j+1} de ${r.n}</span>`;
-    said = `<div class="said ${isNew?"late":""}"><span class="label">${hi.suit?"Dijeron":"Dijo"}</span><b>${r.g ?? "—"}</b>${ok?`<em>¡Clavada! +${EXACT}</em>`:`<span class="no">${r.g==null?"":r.g>a?`${r.g-a} de más`:`${a-r.g} de menos`}</span>`}</div>`;
+    said = `<div class="said ${isNew?"late":""}"><span class="label">${teams()?"Dijeron":"Dijo"}</span><b>${r.g ?? "—"}</b>${ok?`<em>¡Clavada! +${EXACT}</em>`:`<span class="no">${r.g==null?"":r.g>a?`${r.g-a} de más`:`${a-r.g} de menos`}</span>`}</div>`;
     rows = v.hands.map(h=>{
       const x=r.rows.find(y=>y.id===h.id), cls = x.run>21?"bust":x.run===21?"bj":"";
-      const mine=h.members.includes(myPid);
+      const mine=h.id===myPid;
       return `<li class="${x.state} ${cls} ${mine?"me":""}"><span class="rk">${x.state==="now"?"▸":""}</span>
         <span class="nm">${handLabel(h.id)}</span>
         <span class="g">${x.n} ${plural(x.n,"pregunta","preguntas")}</span>
@@ -835,7 +825,7 @@ function renderReveal(){
     ${hud()}
     ${head}
     <section class="qcard ${isNew?"deal":""}">
-      <div class="cat"><span>${esc(r.q.c)}</span><span>${r.i+1} / ${r.of}</span></div>
+      <div class="cat"><span>${esc(r.q.c)} <i class="dots" title="Dificultad">${dots(r.q.d)}</i></span><span>${r.i+1} / ${r.of}</span></div>
       <p class="q">${esc(r.q.t)}</p>
     </section>
     <div class="ans"><div class="num ${isNew?"flip":""}">${a}</div>${said}</div>
@@ -852,7 +842,7 @@ function renderReveal(){
   const next=$("#next"); if(next) next.onclick=()=>net.send({t:"next"});
   const skip=$("#skip"); if(skip) skip.onclick=()=>confirmSheet("¿Saltar?", "Se ven directamente los resultados de la ronda.", "Saltar", ()=>net.send({t:"skip"}));
   if(isNew){
-    const mine = juntos ? r.rows.find(x=>x.id===myPid) : r.rows.find(x=>x.state==="now" && handInfo(x.id).mine);
+    const mine = r.rows.find(x=>x.id===myPid && (juntos || x.state==="now"));
     setTimeout(()=>{ if(mine && mine.run>21 && (juntos?mine.had:true)) buzz([90,50,90]); else buzz(15); }, 1000);
   }
 }
@@ -861,20 +851,20 @@ function renderReveal(){
 function ranks(list, val){ let last=null, rk=0; return list.map((x,i)=>{ const s=val(x); if(s!==last){ rk=i+1; last=s; } return rk; }); }
 function reviewHtml(){
   const r=view.review; if(!r || !r.length) return "";
-  return `<details class="rules"><summary>${view.mode==="equipos"?"Las preguntas de tu equipo":"Tus preguntas"}</summary><ol class="review">${r.map(x=>
-    `<li><p>${esc(x.t)}</p><span>${x.g==null?"Sin responder":`Dijiste ${x.g}`} · era <b>${x.a}</b>${x.g===x.a?" ✓":""}</span></li>`).join("")}</ol></details>`;
+  return `<details class="rules"><summary>${teams()?"Vuestras preguntas":"Tus preguntas"}</summary><ol class="review">${r.map(x=>
+    `<li><p>${esc(x.t)}</p><span>${x.g==null?"Sin responder":`${teams()?"Dijisteis":"Dijiste"} ${x.g}`} · era <b>${x.a}</b>${x.g===x.a?" ✓":""}</span></li>`).join("")}</ol></details>`;
 }
 function renderResults(){
-  const v=view, host=isHost(), L=v.last||[], more=v.round<v.rounds, rk=ranks(L, x=>x.pts);
+  const v=view, host=isHost(), L=v.last||[], rk=ranks(L, x=>x.pts);
   const top=L.filter(x=>x.pts===(L[0]||{}).pts && x.pts>0);
-  const title = !L.length ? "Ronda terminada" : top.length===0 ? "Todos se pasaron" : top.length>1 ? "Empate" : `Gana ${esc(handInfo(top[0].id).name)}`;
+  const title = !L.length ? "Ronda terminada" : top.length===0 ? "Todos se pasaron" : top.length>1 ? "Empate" : `Gana ${esc(handName(top[0].id))}`;
   const bj = L.some(x=>x.total===21);
   app.innerHTML = `
   <main class="wrap">
-    <div class="row" style="justify-content:space-between"><span class="label">Ronda ${v.round} de ${v.rounds}</span><button class="btn ghost" id="menu">Salir</button></div>
+    <div class="row" style="justify-content:space-between"><span class="label">Ronda ${v.round}</span><button class="btn ghost" id="menu">Salir</button></div>
     <p class="title ${bj?"gold":""}">${title}</p>
     <ul class="board">${L.map((x,i)=>`
-      <li class="${handInfo(x.id).mine?"me":""}">
+      <li class="${x.id===myPid?"me":""}">
         <span class="rk">${rk[i]}</span>
         <span class="nm">${handLabel(x.id)}<small class="${x.total>21?"bust":x.total===21?"bj":""}">${x.total>21?`Se pasa · ${x.total}`:x.total===21?"¡21 exacto!":`Suma ${x.total}`}${x.exact?` · ${x.exact} ${plural(x.exact,"clavada","clavadas")}`:""}</small></span>
         <span class="pts">+${x.pts}</span>
@@ -883,8 +873,8 @@ function renderResults(){
     <p class="lede">Puntos: tu suma si no pasas de 21 · 21 exacto, ${BJ} · si te pasas, 0 · +${EXACT} por respuesta clavada. A la derecha, el total.</p>
     ${reviewHtml()}
     <div class="dock">
-      ${host ? `<button class="btn" id="go">${more?`Ronda ${v.round+1}`:"Ver la clasificación final"}</button>
-                ${more?`<button class="btn ghost" id="end" style="align-self:center">Terminar la partida aquí</button>`:""}`
+      ${host ? `<button class="btn" id="go">Otra ronda</button>
+                <button class="btn ghost" id="end" style="align-self:center">Terminar y ver la clasificación</button>`
              : `<p class="lede">Esperando a que ${esc(leaderName())} siga.</p>`}
     </div>
   </main>`;
@@ -896,7 +886,7 @@ function renderFinal(){
   const v=view, host=isHost();
   const ids = Object.keys(v.scores).sort((a,b)=>v.scores[b]-v.scores[a]);
   const rk = ranks(ids, id=>v.scores[id]), best = ids.filter(id=>v.scores[id]===v.scores[ids[0]]);
-  const title = !ids.length ? "Fin" : best.length>1 ? "Empate" : `Gana ${esc(handInfo(best[0]).name)}`;
+  const title = !ids.length ? "Fin" : best.length>1 ? "Empate" : `Gana ${esc(handName(best[0]))}`;
   app.innerHTML = `
   <main class="wrap">
     <div class="row" style="justify-content:space-between"><span class="label">Clasificación final</span><button class="btn ghost" id="menu">Salir</button></div>
@@ -905,9 +895,9 @@ function renderFinal(){
       <div class="pc b"><i>♠</i><b>1</b><i>♠</i></div>
     </div>
     <p class="title gold">${title}</p>
-    ${best.length>1?`<p class="lede center">${best.map(id=>esc(handInfo(id).name)).join(" y ")}, con ${v.scores[best[0]]} puntos.</p>`:""}
+    ${best.length>1?`<p class="lede center">${best.map(id=>esc(handName(id))).join(" y ")}, con ${v.scores[best[0]]} puntos.</p>`:""}
     <ul class="board">${ids.map((id,i)=>`
-      <li class="${handInfo(id).mine?"me":""}"><span class="rk">${rk[i]}</span><span class="nm">${handLabel(id)}</span><span></span><span class="acc">${v.scores[id]}</span></li>`).join("")}
+      <li class="${id===myPid?"me":""}"><span class="rk">${rk[i]}</span><span class="nm">${handLabel(id)}</span><span></span><span class="acc">${v.scores[id]}</span></li>`).join("")}
     </ul>
     ${reviewHtml()}
     <div class="dock">

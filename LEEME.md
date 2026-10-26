@@ -11,9 +11,10 @@ No tiene servidor propio: los móviles se conectan entre sí (WebRTC) y usan el 
 
 1. Uno pulsa **Crear sala**: le sale un código de 4 letras. Esa persona es el **líder**.
 2. Los demás abren el enlace, ponen su nombre y el código. También pueden escanear el **código QR** del líder o abrir el enlace de **Invitar**.
-3. El líder elige el modo y las rondas, y pulsa **Empezar**.
+3. El líder elige el modo y la dificultad, y pulsa **Empezar**.
 4. En cada pregunta marcas cuánto crees que es (0 a 10) y eliges **Otra pregunta** o **Me planto**.
 5. Cuando todos se han plantado, el líder pulsa **Siguiente** para desvelar las respuestas una a una.
+6. Se juegan las rondas que queráis: los puntos se van sumando hasta que el líder pulsa **Terminar y ver la clasificación**.
 
 ### Modos
 
@@ -21,7 +22,17 @@ No tiene servidor propio: los móviles se conectan entre sí (WebRTC) y usan el 
 |---|---|
 | Todos juntos | Todos reciben las mismas preguntas a la vez. Cada uno decide en secreto cuándo plantarse. |
 | Cada uno | Cada jugador recibe sus propias preguntas y va a su ritmo. |
-| Equipos | 2, 3 o 4 equipos (Corazones, Picas, Diamantes, Tréboles). El equipo comparte las preguntas y cualquiera puede responder; todos ven el número que se marca. |
+| Equipos | Igual que «Cada uno», pero cada móvil es un equipo. Al entrar se pone el nombre del equipo («Pepe y Juan»); en la sala se puede cambiar con **Cambiar nombre**. |
+
+### Dificultad
+
+| Nivel | Qué preguntas salen |
+|---|---|
+| Fácil | Sobre todo las que sabe casi todo el mundo. |
+| Variada | Alguna fácil y muchas de las que te hacen dudar entre dos o tres números. |
+| Difícil | Casi todas son datos que no sabes y tienes que deducir («¿cuántos presidentes del monte Rushmore llevan barba?»). |
+
+Los puntitos de cada carta (●●○) indican la dificultad de esa pregunta.
 
 ### Puntos por ronda
 
@@ -39,4 +50,4 @@ No tiene servidor propio: los móviles se conectan entre sí (WebRTC) y usan el 
 
 ## Añadir preguntas
 
-Cada pregunta en `preguntas.js` es una línea: `["Categoría", "Pregunta", respuesta, "Explicación"]`. La respuesta tiene que ser un número entero del 0 al 10. Si un dato puede cambiar con el tiempo, pon el año en la pregunta ("hasta 2025…").
+Cada pregunta en `preguntas.js` es una línea: `["Categoría", "Pregunta", respuesta, "Explicación", dificultad]`. La respuesta tiene que ser un número entero del 0 al 10, y la dificultad 1 (fácil), 2 (media) o 3 (difícil). Si un dato puede cambiar con el tiempo, pon el año en la pregunta ("hasta 2025…").
