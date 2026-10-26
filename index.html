@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="theme-color" content="#0b1d15">
+<meta name="description" content="Juego de preguntas para jugar con amigos desde el móvil: cada respuesta va del 0 al 10, suma y no te pases de 21.">
+<title>Veintiuno</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='2' width='52' height='60' rx='8' fill='%23f5eedd'/%3E%3Ctext x='32' y='44' font-family='Impact,Arial Narrow,sans-serif' font-size='34' text-anchor='middle' fill='%23e23c41'%3E21%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://0.peerjs.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" crossorigin>
+<!-- Fuentes sin bloquear el primer pintado: se ve con la fuente del sistema y cambia al cargar. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" media="print" onload="this.media='all'">
+<style>
+/* Tapete verde de casino, cartas color papel, rojo de corazones y dorado para el 21. */
+:root{
+  --bg:#0b1d15; --panel:#0f281e; --line:#24493a; --fg:#f2ead6; --muted:#8db09d; --dim:#5b7d6e;
+  --paper:#f5eedd; --ink:#1d1915; --red:#e23c41; --red2:#8e1f24; --gold:#f0bd4f;
+  --display:"Anton",Impact,"Arial Narrow",sans-serif;
+  --body:"DM Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --serif:"Fraunces",Georgia,"Times New Roman",serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 var(--body);-webkit-tap-highlight-color:transparent;
+  background-image:radial-gradient(ellipse 130% 70% at 50% -5%,#1b4a37 0%,transparent 70%),radial-gradient(ellipse at 50% 115%,#05100b 0%,transparent 60%);background-attachment:fixed}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+button:disabled{opacity:.35;cursor:default}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+input{font:inherit;font-size:18px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%}
+input:focus{border-color:var(--gold);outline:none}
+input::placeholder{color:#406a59}
+.wrap{max-width:480px;margin:0 auto;padding:20px 16px calc(28px + env(safe-area-inset-bottom,0px));min-height:100%;display:flex;flex-direction:column;gap:22px}
+.label{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.lede{color:var(--muted);margin:0;font-size:14px}
+.stack{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:10px;align-items:center}
+.center{text-align:center;align-items:center}
+.red{color:var(--red)}
+.btn{background:var(--red);color:#fff;font-weight:700;padding:15px 16px;font-size:16px;border-radius:14px;flex:1;box-shadow:0 5px 0 var(--red2);transition:transform .08s,box-shadow .08s}
+.btn:active:not(:disabled){transform:translateY(3px);box-shadow:0 2px 0 var(--red2)}
+.btn.alt{background:var(--paper);color:var(--ink);box-shadow:0 5px 0 #b3a68a}
+.btn.alt:active:not(:disabled){box-shadow:0 2px 0 #b3a68a}
+.btn.line{background:transparent;color:var(--fg);border:1px solid var(--line);box-shadow:none;padding:12px 14px;font-size:15px}
+.btn.ghost{background:transparent;color:var(--muted);flex:0 0 auto;padding:8px 2px;font-size:14px;font-weight:600;box-shadow:none}
+.err{color:var(--red);min-height:1.4em;margin:0;font-size:14px}
+.tag{font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+.off{opacity:.4}
+
+/* Portada */
+.hero{display:flex;justify-content:center;padding-top:18px;height:170px}
+.pc{width:104px;height:146px;background:var(--paper);color:var(--ink);border-radius:12px;position:relative;display:grid;place-items:center;
+  box-shadow:0 20px 40px -18px #000,inset 0 0 0 1px #0000001a}
+.pc b{font:400 92px/1 var(--display)}
+.pc i{position:absolute;font-style:normal;font-size:20px;line-height:1}
+.pc i:first-of-type{top:8px;left:10px} .pc i:last-of-type{bottom:8px;right:10px;transform:rotate(180deg)}
+.pc.a{transform:rotate(-9deg) translateX(14px);color:var(--red)}
+.pc.b{transform:rotate(7deg) translate(-10px,8px)}
+h1{font:400 clamp(56px,17vw,84px)/.9 var(--display);margin:0;text-transform:uppercase;letter-spacing:.01em}
+details summary{cursor:pointer;color:var(--muted);font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
+.rules{color:var(--muted);font-size:14px}
+.rules ol{padding-left:20px;margin:12px 0}
+.rules li{margin-bottom:8px}
+.rules b{color:var(--fg)}
+.rules p{margin:0 0 10px}
+.foot{color:var(--dim);font-size:12px;text-align:center;margin:0}
+
+/* Sala */
+.code{font:400 96px/.9 var(--display);letter-spacing:.06em}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;padding:10px 4px;border-radius:9px;color:var(--muted);font-size:14px;font-weight:700}
+.seg button[aria-pressed=true]{background:var(--paper);color:var(--ink)}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.list li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.teams{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.team{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:4px;min-height:100px}
+.team.mine{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.team .suit{font-size:26px;line-height:1}
+.team b{font-weight:700}
+.team .mem{font-size:13px;color:var(--muted)}
+.summary{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:4px}
+.summary b{font-weight:700}
+
+/* Juego */
+.game{max-width:480px;margin:0 auto;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;gap:14px;padding:12px 16px calc(18px + env(safe-area-inset-bottom,0px))}
+.hud{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.hud .r{font:400 24px/1 var(--display);text-transform:uppercase;letter-spacing:.02em}
+.hud .r small{font:700 12px var(--body);color:var(--muted);letter-spacing:.08em;margin-left:4px}
+.who{display:flex;flex-wrap:wrap;gap:6px}
+.who .chip{font-size:13px;padding:5px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--muted);display:inline-flex;gap:6px;align-items:center}
+.who .chip i{font-style:normal;width:7px;height:7px;border-radius:50%;background:var(--dim)}
+.who .chip.pensando i{background:var(--gold);animation:blink 1.2s infinite}
+.who .chip.listo i{background:#5fd39a}
+.who .chip.plantado{color:var(--fg)} .who .chip.plantado i{background:var(--red)}
+.who .chip.me{border-color:#4f7d69;color:var(--fg)}
+.who button.chip:disabled{opacity:1}
+@keyframes blink{50%{opacity:.25}}
+.qcard{background:var(--paper);color:var(--ink);border-radius:18px;padding:16px 18px 20px;position:relative;overflow:hidden;
+  box-shadow:0 18px 40px -18px #000,inset 0 0 0 1px #00000014;display:flex;flex-direction:column;gap:10px}
+.qcard.tall{min-height:160px}
+.qcard .cat{font:700 11px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--red);display:flex;justify-content:space-between;gap:10px}
+.qcard .cat span:last-child{color:#8b8170}
+.qcard .q{font:500 clamp(21px,5.7vw,26px)/1.27 var(--serif);margin:0;text-wrap:pretty}
+.qcard::after{content:"21";position:absolute;right:12px;bottom:-12px;font:400 64px/1 var(--display);color:#00000010;pointer-events:none}
+.qcard.ghost{background:transparent;color:var(--fg);border:1px dashed var(--line);box-shadow:none;min-height:0}
+.qcard.ghost .q{font-size:18px}
+.qcard.ghost::after{display:none}
+.deal{animation:deal .35s cubic-bezier(.2,1.1,.4,1)}
+@keyframes deal{from{transform:translateY(24px) rotate(-2deg);opacity:0}}
+.pick{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.pick button{height:50px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font:400 24px/1 var(--display);color:var(--fg)}
+.pick button[aria-pressed=true]{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+.meter{display:flex;flex-direction:column;gap:8px}
+.meter .top{display:flex;justify-content:space-between;align-items:baseline}
+.sum{font:400 34px/1 var(--display)}
+.sum.over{color:var(--red)} .sum.bj{color:var(--gold)}
+.bar{height:8px;border-radius:99px;background:var(--panel);border:1px solid var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--paper);border-radius:99px;transition:width .25s}
+.bar.over i{background:var(--red)} .bar.bj i{background:var(--gold)}
+.gs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;min-height:30px}
+.gs i{font-style:normal;min-width:26px;height:30px;padding:0 6px;display:grid;place-items:center;background:var(--paper);color:var(--ink);border-radius:6px;font:400 17px/1 var(--display)}
+.gs i.now{background:var(--gold)}
+.gs span{color:var(--dim);font-size:13px}
+.actions{margin-top:auto;padding-top:6px}
+.dock{position:sticky;bottom:0;margin:auto -16px 0;padding:14px 16px calc(10px + env(safe-area-inset-bottom,0px));background:linear-gradient(#0a1a1300,#0a1a13 28%);display:flex;flex-direction:column;gap:6px;z-index:2}
+.dock .lede{text-align:center}
+.dock.row{flex-direction:row}
+.dock.row .btn{white-space:nowrap}
+@media (max-width:380px){.dock.row .btn{font-size:15px;padding:14px 8px}}
+@media (max-height:700px){.game{gap:10px}.pick button{height:42px;font-size:21px}.qcard .q{font-size:20px}.qcard.tall{min-height:120px}.sum{font-size:28px}.seg button{font-size:13px}}
+.bigsum{font:400 84px/1 var(--display)}
+.panel{display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center;padding:12px 0}
+.panel .gs{justify-content:center}
+
+/* Desvelar */
+.ans{display:flex;align-items:center;justify-content:center;gap:18px;min-height:112px}
+.num{width:80px;height:112px;border-radius:12px;background:var(--red);color:#fff;display:grid;place-items:center;font:400 62px/1 var(--display);box-shadow:0 16px 30px -14px #000}
+.num.flip{animation:flip .55s .45s both}
+@keyframes flip{from{transform:perspective(600px) rotateY(90deg);opacity:0}to{transform:none;opacity:1}}
+.said{display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.said b{font:400 44px/1 var(--display)}
+.said em{font-style:normal;color:var(--gold);font-weight:700;font-size:14px}
+.said .no{color:var(--muted);font-size:14px}
+.x{margin:0;color:var(--muted);font-size:15px;text-align:center;text-wrap:pretty}
+.late{animation:fade .4s .9s both}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+.seqs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;justify-content:center}
+.seqs i{font-style:normal;min-width:26px;height:30px;padding:0 6px;display:grid;place-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;font:400 17px/1 var(--display)}
+.seqs i.cur{background:var(--red);border-color:var(--red)}
+.seqs span{color:var(--dim);font-size:13px}
+.seqs b{font:400 22px/1 var(--display);margin-left:4px}
+.board{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.board li{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:9px 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line)}
+.board .rk{font:400 18px/1 var(--display);color:var(--dim);min-width:1.2ch}
+.board .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board .nm small{display:block;color:var(--muted);font-size:12px}
+.board .g{font-size:13px;color:var(--muted);white-space:nowrap}
+.board .g.ok{color:var(--gold);font-weight:700}
+.board .tot{font:400 26px/1 var(--display);min-width:2ch;text-align:right}
+.board .pts{font:400 18px/1 var(--display);color:var(--gold);white-space:nowrap}
+.board li.now{border-color:var(--paper)}
+.board li.out,.board li.wait{opacity:.5}
+.board li.bust .tot{color:var(--red)} .board li.bj .tot{color:var(--gold)}
+.board .acc{font:400 26px/1 var(--display);min-width:2ch;text-align:right}
+.board small.bust{color:var(--red)} .board small.bj{color:var(--gold)}
+.board li.me{border-color:#4f7d69}
+.bump{animation:bump .5s 1s both}
+@keyframes bump{from{transform:scale(1.5);color:var(--gold)}}
+.title{font:400 44px/.95 var(--display);text-transform:uppercase;margin:0;text-align:center}
+.title.red{color:var(--red)} .title.gold{color:var(--gold)}
+.review{list-style:none;padding:0;margin:12px 0 0;display:flex;flex-direction:column;gap:10px}
+.review li{border-bottom:1px solid var(--line);padding-bottom:10px;font-size:14px}
+.review p{margin:0 0 4px;color:var(--fg);font-family:var(--serif);font-size:16px}
+.review span{color:var(--muted)}
+.review b{color:var(--gold)}
+
+.sheet{position:fixed;inset:0;background:#05100bcc;display:grid;place-items:center;padding:16px;z-index:6}
+.sheet .box{width:100%;max-width:400px;background:#10291f;border:1px solid var(--line);border-radius:18px;padding:22px 16px 16px;display:flex;flex-direction:column;gap:18px;text-align:center;animation:in .18s ease-out;box-shadow:0 30px 80px -20px #000}
+@keyframes in{from{transform:scale(.94);opacity:0}}
+.sheet .q{font:400 36px/1 var(--display);text-transform:uppercase;margin:0}
+.qr{background:#fff;border-radius:12px;padding:12px;align-self:center;width:min(260px,70vw);aspect-ratio:1;display:grid;place-items:center;color:var(--ink)}
+.qr img{width:100%;height:auto;image-rendering:pixelated}
+.status{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);background:var(--red);color:#fff;padding:5px 12px;border-radius:99px;font-size:12px;font-weight:700;z-index:9;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.deal,.num.flip,.late,.bump,.sheet .box,.who .chip.pensando i{animation:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="preguntas.js"></script>
+<script>
+"use strict";
+/* ============ utilidades ============ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Nombre y preguntas ya vistas en localStorage; identidad y partida en sessionStorage (cada pestaña es un jugador distinto).
+const mkStore = area => ({
+  get(k){ try { return JSON.parse(window[area].getItem("v21_"+k)); } catch { return null; } },
+  set(k,v){ try { window[area].setItem("v21_"+k, JSON.stringify(v)); } catch {} },
+  del(k){ try { window[area].removeItem("v21_"+k); } catch {} }
+});
+const store = mkStore("sessionStorage"), prefs = mkStore("localStorage");
+const rid = () => Math.random().toString(36).slice(2,10);
+const myPid = store.get("pid") || (()=>{ const p = rid(); store.set("pid",p); return p; })();
+const PREFIX = "veintiuno-es-";
+// PeerJS se carga en segundo plano para que la portada salga al instante.
+const loadScript = src => new Promise((res,rej)=>{
+  const s=document.createElement("script"); s.crossOrigin="anonymous"; s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s);
+});
+const peerLib = loadScript("https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js");
+peerLib.catch(()=>{});
+// Si aún no ha llegado la librería, espera y vuelve a llamar a f; si falla, avisa.
+function needPeer(f){
+  if(typeof Peer!=="undefined") return true;
+  net.setStatus("Conectando…");
+  peerLib.then(f, ()=>{ net.stop(); store.del("session"); net.setStatus(""); view=null; showHomeError("No se pudo cargar el juego. Revisa la conexión a internet y recarga la página."); });
+  return false;
+}
+const qs = new URLSearchParams(location.search);
+// ?peerhost=localhost:9000 permite usar un servidor PeerJS propio (pruebas).
+function peerOpts(){
+  const h = qs.get("peerhost"); if(!h) return {debug:0};
+  const [host,port] = h.split(":");
+  return {host, port:+port||9000, path:"/", secure:false, debug:0};
+}
+function newCode(){ const A="ABCDEFGHJKLMNPQRSTUVWXYZ"; let c=""; for(let i=0;i<4;i++) c+=A[Math.floor(Math.random()*A.length)]; return c; }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+let wakeLock=null;
+async function keepAwake(){ try{ if(!wakeLock && navigator.wakeLock){ wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release",()=>wakeLock=null);} }catch{} }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && net.role) keepAwake(); });
+const buzz = p => { try{ navigator.vibrate && navigator.vibrate(p); }catch{} };
+
+/* ============ reglas ============ */
+const TEAMS = [{n:"Corazones",s:"♥",red:1},{n:"Picas",s:"♠"},{n:"Diamantes",s:"♦",red:1},{n:"Tréboles",s:"♣"}];
+const MODES = {
+  juntos:{n:"Todos juntos", d:"Todos recibís las mismas preguntas a la vez. Cada uno decide en secreto cuándo plantarse."},
+  solo:{n:"Cada uno", d:"Cada jugador recibe sus propias preguntas y va a su ritmo."},
+  equipos:{n:"Equipos", d:"Cada equipo comparte las preguntas y decide junto. Cualquiera del equipo puede responder."}
+};
+const ROUNDS = [3,5,7,10];
+const MAXQ = 10;                    // máximo de preguntas por mano y ronda
+const BJ = 30, EXACT = 2;           // 21 exacto vale 30; cada respuesta clavada, +2
+const points = (total, exact) => (total>21 ? 0 : total===21 ? BJ : total) + EXACT*exact;
+const sumA = list => list.reduce((s,i)=>s+PREGUNTAS[i][2], 0);
+const sum = a => a.reduce((s,x)=>s+x, 0);
+// Identificador estable de cada pregunta (por su texto) para no repetirlas entre partidas.
+const QID = PREGUNTAS.map(q=>{ let h=5381; for(let i=0;i<q[1].length;i++) h=((h*33)^q[1].charCodeAt(i))>>>0; return h.toString(36); });
+// Reparte una pregunta que no haya salido en esta partida y, mientras queden, que este móvil no haya repartido antes.
+function drawQuestion(S){
+  const dealt = new Set(S.dealt), all = PREGUNTAS.map((_,i)=>i);
+  let seen = new Set(prefs.get("seen")||[]);
+  let pool = all.filter(i=>!dealt.has(i) && !seen.has(QID[i]));
+  if(!pool.length){ seen = new Set(); pool = all.filter(i=>!dealt.has(i)); }
+  if(!pool.length) pool = all;
+  const i = pool[Math.floor(Math.random()*pool.length)];
+  seen.add(QID[i]); prefs.set("seen",[...seen]); S.dealt.push(i);
+  return i;
+}
+
+/* ============ lógica de partida (solo la ejecuta el anfitrión, que es el líder) ============ */
+const Game = {
+  S:null,
+  create(code, hostName){
+    this.S = {code, phase:"lobby", mode:"juntos", rounds:5, teamsN:2, round:0,
+      players:[{id:myPid, name:hostName, connected:true, team:0}],
+      hands:[], shared:[], dealt:[], steps:[], step:0, last:null, scores:{}, ev:{seq:0}};
+  },
+  p(id){ return this.S.players.find(p=>p.id===id); },
+  hand(pid){ return this.S.hands.find(h=>h.members.includes(pid)); },
+  event(o){ this.S.ev = {...o, seq:this.S.ev.seq+1}; },
+  smallestTeam(){
+    const c=Array(this.S.teamsN).fill(0);
+    this.S.players.forEach(p=>{ if(p.team<c.length) c[p.team]++; });
+    return c.indexOf(Math.min(...c));
+  },
+  newGame(){ const S=this.S; S.round=0; S.scores={}; S.dealt=[]; this.startRound(); },
+  startRound(){
+    const S=this.S;
+    S.round++; S.phase="play"; S.shared=[]; S.steps=[]; S.step=0; S.last=null;
+    S.hands = S.mode==="equipos"
+      ? TEAMS.slice(0,S.teamsN).map((t,i)=>({id:"t"+i, name:t.n, team:i, members:S.players.filter(p=>p.team===i).map(p=>p.id)})).filter(h=>h.members.length)
+      : S.players.map(p=>({id:p.id, name:p.name, members:[p.id]}));
+    S.hands.forEach(h=>{ h.qs=[]; h.gs=[]; h.stood=false; h.draft=null; });
+    if(S.mode==="juntos"){ const q=drawQuestion(S); S.shared.push(q); S.hands.forEach(h=>h.qs.push(q)); }
+    else S.hands.forEach(h=>h.qs.push(drawQuestion(S)));
+    this.event({kind:"round"});
+  },
+  // Modo juntos: cuando todos los que siguen han respondido, sale la siguiente pregunta solo para ellos.
+  advanceShared(){
+    const S=this.S, on=S.hands.filter(h=>!h.stood);
+    if(!on.length || !on.every(h=>h.gs.length===h.qs.length)) return;
+    const q=drawQuestion(S); S.shared.push(q); on.forEach(h=>h.qs.push(q));
+    this.event({kind:"question"});
+  },
+  afterMove(){
+    const S=this.S;
+    if(S.mode==="juntos") this.advanceShared();
+    if(S.hands.every(h=>h.stood)) this.startReveal();
+  },
+  startReveal(){
+    const S=this.S;
+    S.steps = S.mode==="juntos" ? S.shared.map((_,k)=>({k})) : S.hands.flatMap((h,hi)=>h.qs.map((_,j)=>({h:hi, j})));
+    S.step = 0;
+    if(!S.steps.length) return this.finishRound();
+    S.phase="reveal"; this.event({kind:"reveal"});
+  },
+  finishRound(){
+    const S=this.S;
+    S.last = S.hands.map(h=>{
+      const total=sumA(h.qs), exact=h.qs.filter((q,j)=>h.gs[j]===PREGUNTAS[q][2]).length, pts=points(total,exact);
+      S.scores[h.id]=(S.scores[h.id]||0)+pts;
+      return {id:h.id, name:h.name, team:h.team, n:h.qs.length, total, exact, pts};
+    }).sort((a,b)=>b.pts-a.pts);
+    S.phase="results"; this.event({kind:"results"});
+  },
+  handle(pid, m){
+    const S=this.S; if(!S) return;
+    const p=this.p(pid), host=pid===myPid;
+    const okGuess = g => Number.isInteger(g) && g>=0 && g<=10;
+    switch(m.t){
+      case "cfg":
+        if(!host || S.phase!=="lobby") return;
+        if(MODES[m.mode]) S.mode=m.mode;
+        if(ROUNDS.includes(m.rounds)) S.rounds=m.rounds;
+        if([2,3,4].includes(m.teamsN) && m.teamsN!==S.teamsN){
+          S.teamsN=m.teamsN; S.players.forEach(x=>{ if(x.team>=S.teamsN) x.team=this.smallestTeam(); });
+        }
+        break;
+      case "team":
+        if(!p || S.phase!=="lobby" || !(Number.isInteger(m.team) && m.team>=0 && m.team<S.teamsN)) return;
+        p.team=m.team; break;
+      case "shuffle":
+        if(!host || S.phase!=="lobby") return;
+        shuffle(S.players.slice()).forEach((x,i)=>x.team=i%S.teamsN); break;
+      case "start":
+        if(!host || S.phase!=="lobby") return;
+        this.newGame(); break;
+      case "draft": {
+        const h=this.hand(pid);
+        if(!h || S.phase!=="play" || h.stood || S.mode!=="equipos") return;
+        h.draft = okGuess(m.g) ? m.g : null; break;
+      }
+      case "answer": {
+        const h=this.hand(pid);
+        if(!h || S.phase!=="play" || h.stood || m.n!==h.qs.length || h.gs.length!==h.qs.length-1 || !okGuess(m.g)) return;
+        h.gs.push(m.g); h.draft=null;
+        if(m.stand || h.qs.length>=MAXQ) h.stood=true;
+        else if(S.mode!=="juntos") h.qs.push(drawQuestion(S));
+        this.afterMove(); break;
+      }
+      case "force": {
+        const h=S.hands.find(x=>x.id===m.id);
+        if(!host || S.phase!=="play" || !h || h.stood) return;
+        if(h.gs.length<h.qs.length) h.qs.pop();   // la pregunta que no ha respondido no cuenta
+        h.stood=true; h.draft=null; this.afterMove(); break;
+      }
+      case "next":
+        if(!host || S.phase!=="reveal") return;
+        if(S.step<S.steps.length-1){ S.step++; this.event({kind:"step"}); } else this.finishRound();
+        break;
+      case "skip":
+        if(!host || S.phase!=="reveal") return;
+        this.finishRound(); break;
+      case "round":
+        if(!host || S.phase!=="results") return;
+        if(S.round<S.rounds) this.startRound(); else { S.phase="final"; this.event({kind:"final"}); }
+        break;
+      case "end":
+        if(!host || S.phase!=="results") return;
+        S.phase="final"; this.event({kind:"final"}); break;
+      case "again":
+        if(!host || S.phase!=="final") return;
+        S.players = S.players.filter(x=>x.connected); this.newGame(); break;
+      case "lobby":
+        if(!host) return;
+        S.phase="lobby"; S.round=0; S.hands=[]; S.shared=[]; S.steps=[]; S.last=null; S.scores={};
+        S.players = S.players.filter(x=>x.connected);
+        this.event({kind:"lobby"}); break;
+      case "kick":
+        if(!host || S.phase!=="lobby" || m.id===myPid) return;
+        S.players = S.players.filter(x=>x.id!==m.id); net.dropPlayer(m.id); break;
+      default: return;
+    }
+    net.broadcast();
+  },
+  revealView(){
+    const S=this.S, st=S.steps[S.step], A=i=>PREGUNTAS[i][2], Q=i=>{ const q=PREGUNTAS[i]; return {c:q[0], t:q[1], a:q[2], x:q[3]}; };
+    if(S.mode==="juntos"){
+      const k=st.k;
+      return {i:S.step, of:S.steps.length, q:Q(S.shared[k]), seq:S.shared.slice(0,k+1).map(A),
+        rows:S.hands.map(h=>({id:h.id, had:k<h.qs.length, g:h.gs[k], run:sumA(h.qs.slice(0,k+1)), n:h.qs.length}))};
+    }
+    const H=S.hands[st.h];
+    return {i:S.step, of:S.steps.length, hand:H.id, j:st.j, n:H.qs.length, q:Q(H.qs[st.j]),
+      seq:H.qs.slice(0,st.j+1).map(A), g:H.gs[st.j],
+      rows:S.hands.map((h,i)=>({id:h.id, n:h.qs.length,
+        state: i<st.h || !h.qs.length ? "done" : i===st.h ? "now" : "wait",
+        run: i<st.h || !h.qs.length ? sumA(h.qs) : i===st.h ? sumA(h.qs.slice(0,st.j+1)) : null}))};
+  },
+  view(forId){
+    const S=this.S, h=this.hand(forId), Q=i=>({c:PREGUNTAS[i][0], t:PREGUNTAS[i][1]});
+    const v = {code:S.code, phase:S.phase, mode:S.mode, rounds:S.rounds, round:S.round, teamsN:S.teamsN, host:myPid, ev:S.ev,
+      scores:S.scores, last:S.last,
+      players:S.players.map(p=>({id:p.id, name:p.name, connected:p.connected, team:p.team})),
+      hands:S.hands.map(x=>({id:x.id, name:x.name, team:x.team, members:x.members, n:x.qs.length, a:x.gs.length, stood:x.stood}))};
+    // Solo se manda el texto de tus preguntas: las respuestas no salen del móvil del líder hasta desvelarlas.
+    if(h && S.phase==="play") v.me = {id:h.id, qs:h.qs.map(Q), gs:h.gs.slice(), stood:h.stood, draft:h.draft};
+    if(S.phase==="play" && S.mode==="juntos" && S.shared.length) v.cur = {n:S.shared.length, ...Q(S.shared[S.shared.length-1])};
+    if(S.phase==="reveal") v.rev = this.revealView();
+    if((S.phase==="results"||S.phase==="final") && h) v.review = h.qs.map((i,j)=>({t:PREGUNTAS[i][1], a:PREGUNTAS[i][2], g:h.gs[j]}));
+    return v;
+  }
+};
+
+/* ============ red (PeerJS / WebRTC) ============ */
+const net = {
+  role:null, peer:null, conns:new Map() /* pid -> conn */, conn:null, code:null, name:null, retry:null, status:"",
+  setStatus(s){ this.status=s; renderStatus(); },
+
+  host(code, name, restore){
+    this.role="host"; this.code=code; this.name=name;
+    if(restore) Game.S = restore; else Game.create(code, name);
+    Game.p(myPid).name = name;
+    store.set("session",{role:"host", code, name});
+    this.openHostPeer();
+    net.broadcast();
+  },
+  openHostPeer(){
+    if(!needPeer(()=>this.role==="host"&&this.openHostPeer())) return;
+    if(this.peer){ try{this.peer.destroy();}catch{} }
+    const peer = this.peer = new Peer(PREFIX+this.code, peerOpts());
+    this.setStatus("Conectando…");
+    peer.on("open", ()=>this.setStatus(""));
+    peer.on("connection", conn=>{
+      conn.on("data", m=>{
+        if(!m || typeof m!=="object") return;
+        if(m.t==="join"){
+          const S=Game.S, name=String(m.name||"").slice(0,16).trim()||"Jugador";
+          let p = Game.p(m.pid);
+          if(!p){
+            if(S.players.length>=16){ conn.send({t:"reject", why:"La sala está llena (máx. 16)."}); return; }
+            // Se puede entrar con la partida empezada: juega desde la siguiente ronda.
+            p = {id:m.pid, name, connected:true, team:Game.smallestTeam()}; S.players.push(p);
+          }
+          const old = this.conns.get(m.pid); if(old && old!==conn){ try{old.close();}catch{} }
+          p.connected=true; p.name=name; conn.pid=m.pid; this.conns.set(m.pid, conn);
+          this.broadcast(); return;
+        }
+        if(conn.pid) Game.handle(conn.pid, m);
+      });
+      conn.on("close", ()=>{
+        if(conn.pid && this.conns.get(conn.pid)===conn){
+          this.conns.delete(conn.pid); const p=Game.p(conn.pid); if(p){ p.connected=false; this.broadcast(); }
+        }
+      });
+    });
+    peer.on("disconnected", ()=>{ this.setStatus("Reconectando…"); setTimeout(()=>{ try{ if(!peer.destroyed) peer.reconnect(); }catch{} }, 1500); });
+    peer.on("error", e=>{
+      if(e.type==="unavailable-id"){ this.setStatus("Recuperando la sala…"); setTimeout(()=>this.role==="host"&&this.openHostPeer(), 3000); }
+      else if(e.type==="network"||e.type==="server-error"||e.type==="socket-error"||e.type==="socket-closed"){ this.setStatus("Sin conexión con el servidor. Reintentando…"); setTimeout(()=>this.role==="host"&&this.openHostPeer(), 4000); }
+    });
+  },
+  dropPlayer(id){ const c=this.conns.get(id); if(c){ try{c.send({t:"reject", why:"El líder te ha sacado de la sala."}); setTimeout(()=>c.close(),300);}catch{} this.conns.delete(id);} },
+  broadcast(){
+    if(this.role!=="host") return;
+    store.set("hostState", Game.S);
+    for(const [pid,c] of this.conns){ if(c.open){ try{ c.send({t:"state", v:Game.view(pid)}); }catch{} } }
+    onState(Game.view(myPid));
+  },
+
+  join(code, name){
+    this.role="guest"; this.code=code; this.name=name;
+    store.set("session",{role:"guest", code, name});
+    if(!needPeer(()=>this.role==="guest"&&this.join(code,name))) return;
+    if(this.peer){ try{this.peer.destroy();}catch{} }
+    const peer = this.peer = new Peer(peerOpts());
+    this.setStatus("Conectando…");
+    peer.on("open", ()=>this.connectToHost());
+    peer.on("disconnected", ()=>{ setTimeout(()=>{ try{ if(!peer.destroyed) peer.reconnect(); }catch{} }, 1500); });
+    peer.on("error", e=>{
+      if(e.type==="peer-unavailable"){
+        if(view) { this.setStatus("Buscando al líder…"); this.scheduleRetry(); }
+        else { leave(); showHomeError("No existe ninguna sala con el código "+code+"."); }
+      } else if(["network","server-error","socket-error","socket-closed"].includes(e.type)){
+        this.setStatus("Sin conexión. Reintentando…"); clearTimeout(this.retry); this.retry=setTimeout(()=>this.role==="guest"&&this.join(this.code,this.name),4000);
+      }
+    });
+  },
+  connectToHost(){
+    if(this.role!=="guest") return;
+    if(this.conn){ try{this.conn.close();}catch{} }
+    const conn = this.conn = this.peer.connect(PREFIX+this.code, {reliable:true});
+    conn.on("open", ()=>{ this.setStatus(""); conn.send({t:"join", pid:myPid, name:this.name}); });
+    conn.on("data", m=>{
+      if(m.t==="state") onState(m.v);
+      if(m.t==="reject"){ leave(); showHomeError(m.why); }
+    });
+    conn.on("close", ()=>{ if(this.role==="guest" && this.conn===conn){ this.setStatus("Conexión perdida. Reconectando…"); this.scheduleRetry(); } });
+  },
+  scheduleRetry(){ clearTimeout(this.retry); this.retry=setTimeout(()=>{ if(this.role!=="guest") return; if(this.peer && this.peer.open) this.connectToHost(); else this.join(this.code,this.name); },2500); },
+  send(m){
+    if(this.role==="host") Game.handle(myPid, m);
+    else if(this.conn && this.conn.open) this.conn.send(m);
+  },
+  stop(){ clearTimeout(this.retry); this.role=null; try{this.peer&&this.peer.destroy();}catch{} this.peer=null; this.conn=null; this.conns.clear(); }
+};
+
+/* ============ interfaz ============ */
+let view=null, homeError="", draft={key:null, g:null, fresh:false}, lastCardKey="", lastRevKey="", sentKey="";
+const app = $("#app");
+const isHost = () => view && view.host===myPid;
+const nameOf = id => { const p = view && view.players.find(x=>x.id===id); return p ? p.name : "Alguien"; };
+const leaderName = () => nameOf(view.host);
+// Nombre de una mano: el jugador o el equipo (con su palo).
+function handInfo(id){
+  const h = (view.hands||[]).find(x=>x.id===id) || (view.last||[]).find(x=>x.id===id);
+  if(id[0]==="t" && /^t\d$/.test(id)){ const t=TEAMS[+id[1]]; return {name:t.n, suit:t, mine:(view.players.find(p=>p.id===myPid)||{}).team===+id[1]}; }
+  return {name: view.players.some(p=>p.id===id) ? nameOf(id) : (h ? h.name : "Alguien"), mine:id===myPid};
+}
+const handLabel = id => { const h=handInfo(id); return (h.suit?`<span class="${h.suit.red?"red":""}">${h.suit.s}</span> `:"")+esc(h.name); };
+const plural = (n, a, b) => n===1 ? a : b;
+
+function leave(){ net.stop(); store.del("session"); store.del("hostState"); view=null; renderHome(); }
+function showHomeError(t){ homeError=t; renderHome(); }
+
+function renderStatus(){
+  let el=$("#status");
+  if(!net.status){ el&&el.remove(); return; }
+  if(!el){ el=document.createElement("div"); el.id="status"; el.className="status"; document.body.appendChild(el); }
+  el.textContent=net.status;
+}
+
+const RULES = `
+  <ol>
+    <li>Cada pregunta tiene como respuesta un número del <b>0 al 10</b>. Algunas son trampa.</li>
+    <li>Al ver cada pregunta, marca cuánto crees que es. La app te va sumando lo que <i>crees</i> que llevas.</li>
+    <li>Pide <b>otra pregunta</b> o <b>plántate</b> cuando creas que estás cerca de 21. Si te pasas, la ronda no te suma.</li>
+    <li>Cuando todos se han plantado, el líder desvela las respuestas una a una. Cuenta la suma real, no la que creías.</li>
+  </ol>
+  <p><b>Puntos por ronda:</b> tu suma si no pasas de 21 · 21 exacto: <b>${BJ}</b> · si te pasas: 0 · y <b>+${EXACT}</b> por cada respuesta que clavas.</p>
+  <p><b>Modos:</b> Todos juntos (las mismas preguntas a la vez), Cada uno (preguntas propias, a tu ritmo) y Equipos.</p>`;
+
+function renderHome(){
+  closeSheets();
+  const saved = prefs.get("name")||"";
+  const hashCode = (location.hash.replace("#","").toUpperCase().match(/^[A-Z]{4}$/)||[""])[0];
+  app.innerHTML = `
+  <main class="wrap">
+    <div class="hero" aria-hidden="true">
+      <div class="pc a"><i>♥</i><b>2</b><i>♥</i></div>
+      <div class="pc b"><i>♠</i><b>1</b><i>♠</i></div>
+    </div>
+    <div class="stack center" style="gap:8px">
+      <h1>Veintiuno</h1>
+      <p class="lede">Preguntas con respuesta del 0 al 10. Suma sin pasarte de 21.</p>
+    </div>
+    <div class="stack">
+      <label class="label" for="nm">Tu nombre</label>
+      <input id="nm" maxlength="16" autocomplete="nickname" placeholder="Eric" value="${esc(saved)}">
+    </div>
+    <div class="stack">
+      <label class="label" for="cd">Código de sala</label>
+      <div class="row">
+        <input id="cd" maxlength="4" placeholder="ABCD" autocapitalize="characters" autocomplete="off" style="flex:1;min-width:0;text-transform:uppercase;letter-spacing:.3em" value="${hashCode}">
+        <button class="btn" id="joinBtn" style="flex:0 0 auto">Entrar</button>
+      </div>
+    </div>
+    <button class="btn alt" id="hostBtn">Crear sala</button>
+    <p class="err" id="err">${esc(homeError)}</p>
+    <details class="rules"><summary>Cómo se juega</summary>${RULES}</details>
+    <p class="foot">${PREGUNTAS.length} preguntas</p>
+  </main>`;
+  const getName = ()=>{ const n=$("#nm").value.trim(); if(!n){ $("#err").textContent="Escribe tu nombre."; $("#nm").focus(); return null; } prefs.set("name",n); homeError=""; return n; };
+  $("#hostBtn").onclick = ()=>{ const n=getName(); if(!n) return; keepAwake(); net.host(newCode(), n); };
+  const join = ()=>{ const n=getName(); if(!n) return; const c=$("#cd").value.trim().toUpperCase();
+    if(!/^[A-Z]{4}$/.test(c)){ $("#err").textContent="El código tiene 4 letras."; return; }
+    keepAwake(); $("#err").textContent=""; net.join(c,n); renderWaiting(c); };
+  $("#joinBtn").onclick = join;
+  $("#cd").onkeydown = e=>{ if(e.key==="Enter") join(); };
+}
+
+function renderWaiting(code){
+  app.innerHTML = `<main class="wrap"><span class="label">Entrando en la sala</span><div class="code">${esc(code)}</div>
+    <button class="btn ghost" id="cancel" style="align-self:flex-start">Cancelar</button></main>`;
+  $("#cancel").onclick = leave;
+}
+
+function onState(v){
+  const prev = view; view = v;
+  if(draft.fresh && v.mode==="equipos") draft.fresh=false;   // en equipos manda lo que diga el líder
+  if(location.hash.slice(1)!==v.code) history.replaceState(null,"","#"+v.code);
+  render(prev);
+}
+
+function render(prev){
+  if(!view) return renderHome();
+  if(view.phase!=="play") closeSheets();
+  if(view.phase==="lobby") return renderLobby();
+  if(view.phase==="play") return renderPlay(prev);
+  if(view.phase==="reveal") return renderReveal();
+  if(view.phase==="results") return renderResults();
+  if(view.phase==="final") return renderFinal();
+}
+
+/* ---------- ventanas ---------- */
+function closeSheets(){ document.querySelectorAll(".sheet").forEach(s=>s.remove()); }
+function sheet(html, key){
+  closeSheets();
+  const ov=document.createElement("div"); ov.className="sheet"; if(key) ov.dataset.key=key;
+  ov.innerHTML=`<div class="box">${html}</div>`;
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  document.body.appendChild(ov);
+  return ov;
+}
+function confirmSheet(q, text, yes, onYes, key){
+  const ov=sheet(`<p class="q">${q}</p>${text?`<p class="lede">${text}</p>`:""}<div class="row"><button class="btn line" data-no>Cancelar</button><button class="btn" data-yes>${yes}</button></div>`, key);
+  ov.querySelector("[data-no]").onclick=()=>ov.remove();
+  ov.querySelector("[data-yes]").onclick=()=>{ ov.remove(); onYes(); };
+}
+function openMenu(){
+  const host=isHost();
+  const ov=sheet(`<p class="q">¿Salir?</p><p class="lede">${host?"Eres el líder: si sales, se acaba la partida para todos.":"Puedes volver a entrar con el mismo código."}</p>
+    <div class="row"><button class="btn line" data-no>Seguir</button><button class="btn" data-yes>Salir</button></div>
+    ${host && view.phase!=="lobby" ? `<button class="btn ghost" data-lobby style="align-self:center">Volver a la sala</button>`:""}`);
+  ov.querySelector("[data-no]").onclick=()=>ov.remove();
+  ov.querySelector("[data-yes]").onclick=()=>{ ov.remove(); leave(); };
+  const lob=ov.querySelector("[data-lobby]"); if(lob) lob.onclick=()=>{ ov.remove(); net.send({t:"lobby"}); };
+}
+async function showQR(link){
+  const ov=sheet(`<p class="q">Escanea y entra</p><div class="qr" id="qr">Cargando…</div><p class="lede">${esc(link)}</p><button class="btn line" data-no>Cerrar</button>`);
+  ov.querySelector("[data-no]").onclick=()=>ov.remove();
+  try{
+    if(typeof qrcode==="undefined") await loadScript("https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js");
+    const q=qrcode(0,"M"); q.addData(link); q.make();
+    const box=ov.querySelector("#qr"); if(box) box.innerHTML=`<img alt="Código QR de la sala" src="${q.createDataURL(8,0)}">`;
+  }catch{ const box=ov.querySelector("#qr"); if(box) box.textContent="No se pudo generar el QR."; }
+}
+
+/* ---------- sala ---------- */
+function renderLobby(){
+  const v=view, host=isHost(), link=location.origin+location.pathname+"#"+v.code, teams=v.mode==="equipos";
+  const me=v.players.find(p=>p.id===myPid)||{};
+  const config = host ? `
+    <div class="stack"><span class="label">Modo de juego</span>
+      <div class="seg">${Object.entries(MODES).map(([k,m])=>`<button data-mode="${k}" aria-pressed="${v.mode===k}">${m.n}</button>`).join("")}</div>
+      <p class="lede">${MODES[v.mode].d}</p></div>
+    <div class="stack"><span class="label">Rondas</span>
+      <div class="seg">${ROUNDS.map(n=>`<button data-rounds="${n}" aria-pressed="${v.rounds===n}">${n}</button>`).join("")}</div></div>
+    ${teams?`<div class="stack"><span class="label">Equipos</span>
+      <div class="seg">${[2,3,4].map(n=>`<button data-teams="${n}" aria-pressed="${v.teamsN===n}">${n}</button>`).join("")}</div></div>`:""}`
+  : `<div class="summary"><span class="label">Modo</span><b>${MODES[v.mode].n} · ${v.rounds} rondas</b><span class="lede">${MODES[v.mode].d}</span></div>`;
+  const people = teams ? `
+    <div class="stack">
+      <div class="row" style="justify-content:space-between"><span class="label">Toca un equipo para unirte</span>${host?`<button class="btn ghost" id="mix">Mezclar</button>`:""}</div>
+      <div class="teams">${TEAMS.slice(0,v.teamsN).map((t,i)=>{
+        const mem=v.players.filter(p=>p.team===i);
+        return `<button class="team ${me.team===i?"mine":""}" data-team="${i}"><span class="suit ${t.red?"red":""}">${t.s}</span><b>${t.n}</b>
+          <span class="mem">${mem.length?mem.map(p=>`<span class="${p.connected?"":"off"}">${esc(p.name)}</span>`).join(", "):"Nadie todavía"}</span></button>`;}).join("")}</div>
+    </div>`
+  : `<div class="stack"><span class="label">Jugadores · ${v.players.length}</span>
+      <ul class="list">${v.players.map(p=>`
+        <li class="${p.connected?"":"off"}"><span>${esc(p.name)} ${p.id===myPid?'<span class="tag">· tú</span>':""} ${p.id===v.host?'<span class="tag">· líder</span>':""}</span>
+        ${host && p.id!==myPid ? `<button class="btn ghost" data-kick="${esc(p.id)}">Quitar</button>` : (p.connected?"":'<span class="tag">desconectado</span>')}</li>`).join("")}
+      </ul></div>`;
+  app.innerHTML = `
+  <main class="wrap">
+    <div class="row" style="justify-content:space-between"><span class="label">Sala</span><button class="btn ghost" id="exit">Salir</button></div>
+    <div class="stack" style="gap:12px">
+      <div class="code">${esc(v.code)}</div>
+      <div class="row"><button class="btn line" id="share">Invitar</button><button class="btn line" id="qr">Código QR</button></div>
+    </div>
+    ${config}
+    ${people}
+    <div class="dock">${host ? `<button class="btn" id="go">${v.players.length<2?"Empezar (tú solo)":"Empezar"}</button>`
+           : `<p class="lede">Esperando a que ${esc(leaderName())} empiece la partida.</p>`}</div>
+  </main>`;
+  $("#exit").onclick = leave;
+  $("#qr").onclick = ()=>showQR(link);
+  $("#share").onclick = async e=>{
+    if(navigator.share){ try{ await navigator.share({title:"Veintiuno", text:"Entra en mi sala de Veintiuno: "+v.code, url:link}); return; }catch(err){ if(err && err.name==="AbortError") return; } }
+    try{ await navigator.clipboard.writeText(link); e.target.textContent="Enlace copiado"; }catch{ e.target.textContent=link; }
+  };
+  app.querySelectorAll("[data-team]").forEach(b=>b.onclick=()=>net.send({t:"team", team:+b.dataset.team}));
+  if(host){
+    const cfg = o => net.send({t:"cfg", mode:v.mode, rounds:v.rounds, teamsN:v.teamsN, ...o});
+    app.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>cfg({mode:b.dataset.mode}));
+    app.querySelectorAll("[data-rounds]").forEach(b=>b.onclick=()=>cfg({rounds:+b.dataset.rounds}));
+    app.querySelectorAll("[data-teams]").forEach(b=>b.onclick=()=>cfg({teamsN:+b.dataset.teams}));
+    app.querySelectorAll("[data-kick]").forEach(b=>b.onclick=()=>net.send({t:"kick", id:b.dataset.kick}));
+    const mix=$("#mix"); if(mix) mix.onclick=()=>net.send({t:"shuffle"});
+    $("#go").onclick=()=>{ keepAwake(); net.send({t:"start"}); };
+  }
+}
+
+/* ---------- jugar ---------- */
+function hud(){
+  return `<div class="hud"><div class="r">Ronda ${view.round}<small>de ${view.rounds}</small></div><button class="btn ghost" id="menu">Salir</button></div>`;
+}
+// Estado de cada mano: pensando, listo (modo juntos, esperando a los demás) o plantado.
+function whoHtml(){
+  const v=view, host=isHost();
+  return `<div class="who">${v.hands.map(h=>{
+    const st = h.stood ? "plantado" : (v.mode==="juntos" && h.a===h.n) ? "listo" : "pensando";
+    const off = h.members.every(id=>!(v.players.find(p=>p.id===id)||{}).connected);
+    const mine = h.members.includes(myPid);
+    const inner = `<i></i>${handLabel(h.id)}${v.mode!=="juntos"?` · ${h.n}`:""}`;
+    return host && !h.stood && !mine
+      ? `<button class="chip ${st} ${off?"off":""}" data-force="${esc(h.id)}" title="Plantar">${inner}</button>`
+      : `<span class="chip ${st} ${mine?"me":""} ${off?"off":""}">${inner}</span>`;
+  }).join("")}</div>`;
+}
+function chips(gs, extra){
+  const all = gs.map(g=>`<i>${g}</i>`); if(extra!=null) all.push(`<i class="now">${extra}</i>`);
+  return all.join("<span>+</span>");
+}
+function meter(gs, g){
+  const tot = sum(gs)+(g??0), cls = tot>21 ? "over" : tot===21 ? "bj" : "";
+  return `<div class="meter">
+    <div class="top"><span class="label">${g==null?"Llevas, según tú":"Con esta llevarías"}</span><span class="sum ${cls}">≈ ${tot}</span></div>
+    <div class="bar ${cls}"><i style="width:${Math.min(100, tot/21*100)}%"></i></div>
+    <div class="gs">${chips(gs, g)}</div>
+  </div>`;
+}
+const waitingFor = () => view.hands.filter(h=>!h.stood).map(h=>handLabel(h.id));
+
+function renderPlay(){
+  const v=view, me=v.me;
+  let body, bind=null;
+  if(!me){
+    body = `<div class="panel"><span class="label">Has entrado a mitad de ronda</span><p class="title">Juegas en la siguiente</p>
+      <p class="lede">Mientras, los demás siguen pidiendo preguntas.</p></div>`;
+  } else {
+    const n=me.qs.length, pending = !me.stood && me.gs.length<n;
+    if(pending){
+      const q=me.qs[n-1], key=v.round+":"+me.id+":"+n;
+      const g = v.mode==="equipos" ? (draft.key===key && draft.fresh ? draft.g : me.draft) : (draft.key===key ? draft.g : null);
+      const isNew = key!==lastCardKey; lastCardKey=key;
+      const sent = sentKey===key;
+      body = `
+        <section class="qcard tall ${isNew?"deal":""}">
+          <div class="cat"><span>${esc(q.c)}</span><span>Pregunta ${n}${v.mode==="equipos"?" · "+esc(handInfo(me.id).name):""}</span></div>
+          <p class="q">${esc(q.t)}</p>
+        </section>
+        <div class="stack" style="gap:8px">
+          <span class="label">¿Cuánto crees que es?${v.mode==="equipos"?" Lo ve todo tu equipo":""}</span>
+          <div class="pick">${Array.from({length:11},(_,i)=>`<button data-g="${i}" aria-pressed="${g===i}">${i}</button>`).join("")}</div>
+        </div>
+        ${meter(me.gs, g)}
+        <div class="dock row">
+          <button class="btn alt" id="stand" ${g==null||sent?"disabled":""}>Me planto</button>
+          ${n<MAXQ?`<button class="btn" id="more" ${g==null||sent?"disabled":""}>Otra pregunta</button>`:""}
+        </div>`;
+      bind = ()=>bindQuestion(key, n, g);
+    } else if(me.stood){
+      const others = waitingFor();
+      const cur = v.mode==="juntos" && v.cur && v.cur.n>n ? v.cur : null;
+      body = `
+        <div class="panel">
+          <span class="label">${v.mode==="equipos"?"Tu equipo se ha plantado":"Te has plantado"}</span>
+          <div class="bigsum">≈ ${sum(me.gs)}</div>
+          <div class="gs">${chips(me.gs)}</div>
+          <p class="lede">${others.length?`Esperando a ${others.join(", ")}.`:"Vamos a desvelar…"}</p>
+        </div>
+        ${cur?`<section class="qcard ghost"><div class="cat"><span>${esc(cur.c)}</span><span>Pregunta ${cur.n} · ya no te cuenta</span></div><p class="q">${esc(cur.t)}</p></section>`:""}`;
+    } else {
+      const pend = v.hands.filter(h=>!h.stood && h.a<h.n).map(h=>handLabel(h.id));
+      body = `
+        <div class="panel">
+          <span class="label">Respuesta enviada</span>
+          <div class="bigsum">≈ ${sum(me.gs)}</div>
+          <div class="gs">${chips(me.gs)}</div>
+          <p class="lede">${pend.length?`Esperando a ${pend.join(", ")} para la siguiente pregunta.`:"Sale la siguiente…"}</p>
+        </div>`;
+    }
+  }
+  app.innerHTML = `<div class="game">${hud()}${whoHtml()}${body}</div>`;
+  // Si el panel de plantarse está abierto y la pregunta ya no es la misma, se cierra.
+  document.querySelectorAll(".sheet[data-key]").forEach(s=>{ if(!me || s.dataset.key!==v.round+":"+me.id+":"+me.qs.length || me.stood) s.remove(); });
+  $("#menu").onclick=openMenu;
+  if(bind) bind();
+  app.querySelectorAll("[data-force]").forEach(b=>b.onclick=()=>{
+    const name=handInfo(b.dataset.force).name;
+    confirmSheet(`¿Plantar a ${esc(name)}?`, "Úsalo si se ha ido o se ha quedado sin conexión. Se queda con lo que lleva; la pregunta que tenga sin responder no cuenta.", "Plantar", ()=>net.send({t:"force", id:b.dataset.force}));
+  });
+}
+function bindQuestion(key, n, g){
+  const v=view;
+  app.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{
+    draft={key, g:+b.dataset.g, fresh:true}; buzz(8);
+    if(v.mode==="equipos") net.send({t:"draft", g:+b.dataset.g});
+    renderPlay();
+  });
+  const send = stand => { sentKey=key; net.send({t:"answer", n, g, stand}); if(view && view.phase==="play") renderPlay(); };
+  const more=$("#more"); if(more) more.onclick=()=>send(false);
+  const stand=$("#stand"); if(stand) stand.onclick=()=>{
+    const tot=sum(v.me.gs)+g;
+    confirmSheet(`¿Te plantas con ${tot}?`, "Es lo que crees que llevas. Al final cuenta la suma de verdad.", "Me planto", ()=>send(true), key);
+  };
+}
+
+/* ---------- desvelar ---------- */
+function renderReveal(){
+  const v=view, r=v.rev, host=isHost(), juntos=v.mode==="juntos";
+  const key=v.round+":"+r.i, isNew=key!==lastRevKey; lastRevKey=key;
+  const a=r.q.a, run=sum(r.seq);
+  let head, said="", rows;
+  if(juntos){
+    head = `<span class="label">Pregunta ${r.i+1} de ${r.of}</span>`;
+    rows = v.hands.map(h=>{
+      const x=r.rows.find(y=>y.id===h.id), cls = x.run>21?"bust":x.run===21?"bj":"";
+      const mine=h.members.includes(myPid);
+      return `<li class="${x.had?"":"out"} ${cls} ${mine?"me":""}"><span class="rk"></span>
+        <span class="nm">${handLabel(h.id)}</span>
+        <span class="g ${x.had&&x.g===a?"ok":""}">${x.had ? (x.g===a?`dijo ${x.g} ✓`:`dijo ${x.g}`) : "plantado"}</span>
+        <span class="tot ${x.had&&isNew?"bump":""}">${x.run}</span></li>`;
+    }).join("");
+  } else {
+    const hi=handInfo(r.hand), ok=r.g===a;
+    head = `<span class="label">${handLabel(r.hand)} · pregunta ${r.j+1} de ${r.n}</span>`;
+    said = `<div class="said ${isNew?"late":""}"><span class="label">${hi.suit?"Dijeron":"Dijo"}</span><b>${r.g ?? "—"}</b>${ok?`<em>¡Clavada! +${EXACT}</em>`:`<span class="no">${r.g==null?"":r.g>a?`${r.g-a} de más`:`${a-r.g} de menos`}</span>`}</div>`;
+    rows = v.hands.map(h=>{
+      const x=r.rows.find(y=>y.id===h.id), cls = x.run>21?"bust":x.run===21?"bj":"";
+      const mine=h.members.includes(myPid);
+      return `<li class="${x.state} ${cls} ${mine?"me":""}"><span class="rk">${x.state==="now"?"▸":""}</span>
+        <span class="nm">${handLabel(h.id)}</span>
+        <span class="g">${x.n} ${plural(x.n,"pregunta","preguntas")}</span>
+        <span class="tot ${x.state==="now"&&isNew?"bump":""}">${x.run==null?"?":x.run}</span></li>`;
+    }).join("");
+  }
+  app.innerHTML = `
+  <div class="game">
+    ${hud()}
+    ${head}
+    <section class="qcard ${isNew?"deal":""}">
+      <div class="cat"><span>${esc(r.q.c)}</span><span>${r.i+1} / ${r.of}</span></div>
+      <p class="q">${esc(r.q.t)}</p>
+    </section>
+    <div class="ans"><div class="num ${isNew?"flip":""}">${a}</div>${said}</div>
+    <p class="x ${isNew?"late":""}">${esc(r.q.x)}</p>
+    <div class="seqs ${isNew?"late":""}">${r.seq.map((n,i)=>`<i class="${i===r.seq.length-1?"cur":""}">${n}</i>`).join("<span>+</span>")}<span>=</span><b>${run}</b></div>
+    <ul class="board">${rows}</ul>
+    <div class="dock">
+      ${host ? `<button class="btn" id="next">${r.i<r.of-1?"Siguiente":"Ver resultados"}</button>
+                ${r.i<r.of-1?`<button class="btn ghost" id="skip" style="align-self:center">Saltar a los resultados</button>`:""}`
+             : `<p class="lede">${esc(leaderName())} va desvelando las respuestas.</p>`}
+    </div>
+  </div>`;
+  $("#menu").onclick=openMenu;
+  const next=$("#next"); if(next) next.onclick=()=>net.send({t:"next"});
+  const skip=$("#skip"); if(skip) skip.onclick=()=>confirmSheet("¿Saltar?", "Se ven directamente los resultados de la ronda.", "Saltar", ()=>net.send({t:"skip"}));
+  if(isNew){
+    const mine = juntos ? r.rows.find(x=>x.id===myPid) : r.rows.find(x=>x.state==="now" && handInfo(x.id).mine);
+    setTimeout(()=>{ if(mine && mine.run>21 && (juntos?mine.had:true)) buzz([90,50,90]); else buzz(15); }, 1000);
+  }
+}
+
+/* ---------- resultados ---------- */
+function ranks(list, val){ let last=null, rk=0; return list.map((x,i)=>{ const s=val(x); if(s!==last){ rk=i+1; last=s; } return rk; }); }
+function reviewHtml(){
+  const r=view.review; if(!r || !r.length) return "";
+  return `<details class="rules"><summary>${view.mode==="equipos"?"Las preguntas de tu equipo":"Tus preguntas"}</summary><ol class="review">${r.map(x=>
+    `<li><p>${esc(x.t)}</p><span>${x.g==null?"Sin responder":`Dijiste ${x.g}`} · era <b>${x.a}</b>${x.g===x.a?" ✓":""}</span></li>`).join("")}</ol></details>`;
+}
+function renderResults(){
+  const v=view, host=isHost(), L=v.last||[], more=v.round<v.rounds, rk=ranks(L, x=>x.pts);
+  const top=L.filter(x=>x.pts===(L[0]||{}).pts && x.pts>0);
+  const title = !L.length ? "Ronda terminada" : top.length===0 ? "Todos se pasaron" : top.length>1 ? "Empate" : `Gana ${esc(handInfo(top[0].id).name)}`;
+  const bj = L.some(x=>x.total===21);
+  app.innerHTML = `
+  <main class="wrap">
+    <div class="row" style="justify-content:space-between"><span class="label">Ronda ${v.round} de ${v.rounds}</span><button class="btn ghost" id="menu">Salir</button></div>
+    <p class="title ${bj?"gold":""}">${title}</p>
+    <ul class="board">${L.map((x,i)=>`
+      <li class="${handInfo(x.id).mine?"me":""}">
+        <span class="rk">${rk[i]}</span>
+        <span class="nm">${handLabel(x.id)}<small class="${x.total>21?"bust":x.total===21?"bj":""}">${x.total>21?`Se pasa · ${x.total}`:x.total===21?"¡21 exacto!":`Suma ${x.total}`}${x.exact?` · ${x.exact} ${plural(x.exact,"clavada","clavadas")}`:""}</small></span>
+        <span class="pts">+${x.pts}</span>
+        <span class="acc">${v.scores[x.id]||0}</span></li>`).join("")}
+    </ul>
+    <p class="lede">Puntos: tu suma si no pasas de 21 · 21 exacto, ${BJ} · si te pasas, 0 · +${EXACT} por respuesta clavada. A la derecha, el total.</p>
+    ${reviewHtml()}
+    <div class="dock">
+      ${host ? `<button class="btn" id="go">${more?`Ronda ${v.round+1}`:"Ver la clasificación final"}</button>
+                ${more?`<button class="btn ghost" id="end" style="align-self:center">Terminar la partida aquí</button>`:""}`
+             : `<p class="lede">Esperando a que ${esc(leaderName())} siga.</p>`}
+    </div>
+  </main>`;
+  $("#menu").onclick=openMenu;
+  const go=$("#go"); if(go) go.onclick=()=>net.send({t:"round"});
+  const end=$("#end"); if(end) end.onclick=()=>confirmSheet("¿Terminar?", "Se cierra la partida y se ve la clasificación final.", "Terminar", ()=>net.send({t:"end"}));
+}
+function renderFinal(){
+  const v=view, host=isHost();
+  const ids = Object.keys(v.scores).sort((a,b)=>v.scores[b]-v.scores[a]);
+  const rk = ranks(ids, id=>v.scores[id]), best = ids.filter(id=>v.scores[id]===v.scores[ids[0]]);
+  const title = !ids.length ? "Fin" : best.length>1 ? "Empate" : `Gana ${esc(handInfo(best[0]).name)}`;
+  app.innerHTML = `
+  <main class="wrap">
+    <div class="row" style="justify-content:space-between"><span class="label">Clasificación final</span><button class="btn ghost" id="menu">Salir</button></div>
+    <div class="hero" aria-hidden="true">
+      <div class="pc a"><i>♥</i><b>2</b><i>♥</i></div>
+      <div class="pc b"><i>♠</i><b>1</b><i>♠</i></div>
+    </div>
+    <p class="title gold">${title}</p>
+    ${best.length>1?`<p class="lede center">${best.map(id=>esc(handInfo(id).name)).join(" y ")}, con ${v.scores[best[0]]} puntos.</p>`:""}
+    <ul class="board">${ids.map((id,i)=>`
+      <li class="${handInfo(id).mine?"me":""}"><span class="rk">${rk[i]}</span><span class="nm">${handLabel(id)}</span><span></span><span class="acc">${v.scores[id]}</span></li>`).join("")}
+    </ul>
+    ${reviewHtml()}
+    <div class="dock">
+      ${host ? `<button class="btn" id="again">Otra partida</button><button class="btn ghost" id="lobby" style="align-self:center">Volver a la sala</button>`
+             : `<p class="lede">${esc(leaderName())} decide si jugáis otra.</p>`}
+    </div>
+  </main>`;
+  $("#menu").onclick=openMenu;
+  const again=$("#again"); if(again) again.onclick=()=>net.send({t:"again"});
+  const lobby=$("#lobby"); if(lobby) lobby.onclick=()=>net.send({t:"lobby"});
+}
+
+/* ============ arranque: recupera la sesión si se recargó la página ============ */
+(function boot(){
+  const s=store.get("session");
+  if(s && s.role==="host"){ const st=store.get("hostState"); if(st && st.code===s.code){ st.players.forEach(p=>{ if(p.id!==myPid) p.connected=false; }); net.host(s.code, s.name, st); return; } }
+  if(s && s.role==="guest"){ const h=location.hash.slice(1).toUpperCase(); if(!h || h===s.code){ net.join(s.code, s.name); renderWaiting(s.code); return; } }
+  renderHome();
+})();
+</script>
+</body>
+</html>
