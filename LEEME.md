@@ -24,6 +24,10 @@ No tiene servidor propio: los móviles se conectan entre sí (WebRTC) y usan el 
 | Cada uno | Cada jugador recibe sus propias preguntas y va a su ritmo. |
 | Equipos | Igual que «Cada uno», pero cada móvil es un equipo. Al entrar se pone el nombre del equipo («Pepe y Juan»); en la sala se puede cambiar con **Cambiar nombre**. |
 
+### Un solo móvil (equipos por turnos)
+
+En la portada, **Jugar por equipos con un solo móvil**: se escriben los equipos («Pepe y Juan», «Sergio y Rodrigo»…) y la dificultad. Os pasáis el móvil por turnos: cada equipo ve su pregunta, marca cuánto cree que es y pide otra o se planta. No hace falta sala ni internet una vez cargada la página.
+
 ### Dificultad
 
 | Nivel | Qué preguntas salen |
